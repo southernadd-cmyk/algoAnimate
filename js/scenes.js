@@ -76,6 +76,7 @@ export class AnimatedArtwork {
     this.current = null;
     this.layers = [];
     this.queued = null;
+    this.queuedSeconds = 0;
     this.flowing = false;
     this.speed = 1;
     this.turns = 0;
@@ -85,7 +86,15 @@ export class AnimatedArtwork {
   get activeLayer() { return this.layers.at(-1); }
   get drawnSeed() { return this.activeLayer?.scene.seed || this.current?.seed; }
   get drawnMode() { return this.activeLayer?.scene.mode || this.current?.mode; }
-  get needsScene() { return !this.queued && (this.activeLayer?.age || 0) >= 0.5; }
+  needsScene(cycle, gentle = false) {
+    if (this.queued || !this.activeLayer) return false;
+    const remainingSeconds = (1 - this.activeLayer.age) * cycle * (gentle ? 1.6 : 1) / this.speed;
+    return remainingSeconds <= 0.2;
+  }
+  discardQueued() {
+    this.queued = null; this.queuedSeconds = 0;
+    if (this.activeLayer) this.current = this.activeLayer.scene;
+  }
   setScene(scene, immediate = false, startNow = false) {
     const changedSize = this.canvas.width !== scene.width || this.canvas.height !== scene.height;
     if (changedSize) { this.canvas.width = scene.width; this.canvas.height = scene.height; }
@@ -93,9 +102,10 @@ export class AnimatedArtwork {
       ...entry, path: new Path2D(entry.d), geometry: markerGeometry(entry.d), ...pathBounds(entry.d)
     }));
     this.current = { ...scene, paths, schedule: strokeSchedule(paths) };
-    if (immediate || changedSize || !this.flowing) {
+    this.queuedSeconds = 0;
+    if (immediate || changedSize || !this.layers.length) {
       this.layers = []; this.queued = null;
-    } else if (startNow) {
+    } else if (startNow && this.flowing) {
       this.layers.push(this.layer(this.current));
       this.layers = this.layers.slice(-3); this.queued = null; this.turns++;
     } else this.queued = this.current;
@@ -103,6 +113,11 @@ export class AnimatedArtwork {
   }
   layer(scene, age = 0, preview = false) {
     return { scene, age, preview, pressure: new Array(scene.paths.length).fill(null) };
+  }
+  beginCycle(scene, age = 0) {
+    this.queued = null; this.queuedSeconds = 0;
+    this.layers.push(this.layer(scene, age));
+    this.layers = this.layers.slice(-3); this.turns++;
   }
   draw(features, dt, response = 0.6, gentle = false, cycle = 4, flowing = features.active) {
     if (!this.current) return;
@@ -119,11 +134,14 @@ export class AnimatedArtwork {
       this.speed += (targetSpeed - this.speed) * (1 - Math.exp(-dt / 0.2));
       const advance = dt * this.speed / Math.max(0.5, cycle * (gentle ? 1.6 : 1));
       for (const layer of this.layers) layer.age += advance;
+      if (this.queued) this.queuedSeconds += dt;
       while (this.activeLayer.age >= 1) {
         const next = this.queued || this.current, overflow = this.activeLayer.age - 1;
-        this.queued = null;
-        this.layers.push(this.layer(next, overflow)); this.turns++;
+        this.beginCycle(next, overflow);
       }
+      // A slow worker or a settings change must not sit behind a full old
+      // cycle. Existing strokes finish on their own ink layer during handoff.
+      if (this.queued && this.queuedSeconds >= 0.2) this.beginCycle(this.queued);
       this.layers = this.layers.filter(layer => layer.age < (layer.preview ? 1 / 1.6 : 1 + memory));
     }
     const ctx = this.context, scene = this.activeLayer?.scene || this.current;

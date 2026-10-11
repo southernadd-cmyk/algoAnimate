@@ -49,6 +49,22 @@ test('reconnecting one media element reuses its Web Audio source node', async ()
   assert.equal(created, 1); audio.stop();
 });
 
+test('paused, suspended and muted sources cannot feed stale analyser samples', () => {
+  const audio = input(); let reads = 0;
+  audio.wave = new Float32Array(2048); audio.frequencies = new Float32Array(1024);
+  audio.analyser.getFloatTimeDomainData = () => reads++;
+  audio.analyser.getFloatFrequencyData = () => reads++;
+  audio.kind = 'file'; audio.mediaElement = { paused: true };
+  assert.equal(audio.read(), null);
+  audio.mediaElement.paused = false; assert.ok(audio.read()); assert.equal(reads, 2);
+  audio.context.state = 'suspended'; assert.equal(audio.read(), null); assert.equal(reads, 2);
+  audio.context.state = 'running'; audio.kind = 'tab';
+  const a = track('audio'); audio.stream = new Stream([a]);
+  a.muted = true; assert.equal(audio.read(), null);
+  a.muted = false; a.enabled = false; assert.equal(audio.read(), null);
+  a.enabled = true; assert.ok(audio.read()); assert.equal(reads, 4);
+});
+
 test('recording format is detected rather than assuming MP4 or WebM', () => {
   assert.equal(supportedRecordingType({ isTypeSupported: t => t === 'video/mp4' }), 'video/mp4');
   assert.equal(supportedRecordingType({ isTypeSupported: () => false }), null);

@@ -1,5 +1,5 @@
 import { AudioInput, describeCaptureError } from './audio.js';
-import { FeatureTracker, SoundSeed, SILENCE, clamp, evolutionInterval } from './features.js';
+import { FeatureTracker, SoundSeed, SoundGate, SILENCE, clamp, evolutionInterval } from './features.js';
 import { SceneBuilder, AnimatedArtwork, DEFAULT_SETTINGS } from './scenes.js';
 import { VideoRecorder, MAX_TAKE_SECONDS } from './recording.js';
 
@@ -10,6 +10,7 @@ const recordingCanvas = document.createElement('canvas');
 const recordingContext = recordingCanvas.getContext('2d', { alpha: false });
 const artwork = new AnimatedArtwork(art), builder = new SceneBuilder();
 const tracker = new FeatureTracker(), soundSeed = new SoundSeed();
+const soundGate = new SoundGate();
 let features = SILENCE, pending = false, fileURL = null, fileLabel = '', sourceLabel = '';
 let requestedSeed = DEFAULT_SETTINGS.seed, generation = 0, building = false;
 let clock = 0, lastSceneTime = 0, previousFrame = 0, uiTime = 0, onsetUntil = 0;
@@ -65,7 +66,7 @@ function syncControls() {
 }
 
 function resetSound() {
-  tracker.reset(); soundSeed.reset(); features = SILENCE;
+  tracker.reset(); soundSeed.reset(); soundGate.reset(); features = SILENCE;
   waveHistory.length = 0;
   firstSoundSeed = true; lastSceneTime = clock;
 }
@@ -86,7 +87,7 @@ async function connect(action, label) {
 async function disconnect(ended = false) {
   if (pending) return;
   if (recorder.busy) await recorder.stop();
-  audio.stop(); tracker.reset(); features = SILENCE;
+  audio.stop(); tracker.reset(); soundGate.reset(); features = SILENCE;
   message(ended ? 'The audio source ended. Your last drawing is held on the paper.' : 'Audio disconnected. Your last drawing is held on the paper.');
   syncControls();
 }
@@ -115,7 +116,7 @@ player.addEventListener('play', () => {
   if (recorder.busy) { player.pause(); message('Stop the recording before changing audio sources.', true); return; }
   connect(() => audio.file(player), fileLabel || 'Audio file');
 });
-player.addEventListener('pause', () => syncControls());
+player.addEventListener('pause', () => { soundGate.reset(); syncControls(); });
 player.addEventListener('ended', () => { if (audio.kind === 'file') disconnect(true); });
 player.addEventListener('error', () => {
   if (fileURL && !pending) message('This browser could not play that file. Try MP3, WAV or another supported audio format.', true);
@@ -145,7 +146,7 @@ async function generate(seed, immediate = false, startNow = false) {
 for (const id of ['engine', 'orientation', 'palette']) {
   $(id).addEventListener('change', () => {
     if (id === 'orientation' && recorder.busy) return;
-    generate(artwork.current?.seed || DEFAULT_SETTINGS.seed);
+    generate(artwork.current?.seed || DEFAULT_SETTINGS.seed, !audio.kind || (audio.kind === 'file' && player.paused));
     lastSceneTime = clock;
   });
 }
@@ -249,9 +250,10 @@ $('fullscreen').addEventListener('click', async () => {
 function updateUI(now) {
   const active = Boolean(audio.kind);
   const paused = audio.kind === 'file' && player.paused;
-  const label = recorder.active ? 'RECORDING' : paused ? 'AUDIO PAUSED' : active && features.active ? 'LIVE AUDIO' : active ? 'CONNECTED · LISTENING' : 'WAITING FOR SOUND';
+  const label = recorder.active ? 'RECORDING' : paused ? 'AUDIO PAUSED' : active && soundGate.open
+    ? 'DRAWING · LIVE SOUND' : active ? 'SILENT · DRAWING PAUSED' : 'WAITING FOR SOUND';
   $('liveLabel').lastChild.textContent = label;
-  $('liveLabel').classList.toggle('live', active && !recorder.active);
+  $('liveLabel').classList.toggle('live', active && soundGate.open && !recorder.active);
   $('liveLabel').classList.toggle('recording', recorder.active);
   const decibels = features.rms > 1e-7 ? Math.max(-99, Math.round(20 * Math.log10(features.rms))) + ' dBFS' : 'SILENCE';
   $('signalInfo').textContent = active ? decibels + ' / ' + (audio.context.sampleRate / 1000).toFixed(1) + ' kHz' : 'CONNECT A SOURCE TO BEGIN';
@@ -271,15 +273,23 @@ function frame(now) {
   features = data ? tracker.update(data.wave, data.frequencies, data.sampleRate, dt,
     +$('sensitivity').value / 100, +$('smoothing').value / 100) : SILENCE;
   if (features.beat) onsetUntil = now + 150;
+  const available = Boolean(audio.kind) && !(audio.kind === 'file' && player.paused);
+  const flowing = soundGate.update(features.active, dt, available && Boolean(data));
+  if (artwork.flowing && !flowing) {
+    // Reject a worker response that arrives after the source goes quiet.
+    // Keep the exact painted frame and measure a fresh target on resumption.
+    generation++; building = false;
+    artwork.discardQueued(); requestedSeed = artwork.drawnSeed || DEFAULT_SETTINGS.seed;
+    syncControls();
+  }
   const seed = soundSeed.update(features, dt);
   const cycle = evolutionInterval(+$('evolution').value);
   if (features.active && !building && seed !== 'SOUND-READY'
-    && (firstSoundSeed || (seed !== requestedSeed && artwork.needsScene)) && clock - lastSceneTime >= 0.25) {
+    && (firstSoundSeed || (seed !== requestedSeed && artwork.needsScene(cycle, $('gentle').checked))) && clock - lastSceneTime >= 0.25) {
     lastSceneTime = clock;
     const startNow = firstSoundSeed; firstSoundSeed = false;
     generate(seed, false, startNow);
   }
-  const flowing = Boolean(audio.kind) && !(audio.kind === 'file' && player.paused);
   artwork.draw(features, dt, +$('motion').value / 100, $('gentle').checked, cycle, flowing);
   drawWaveform(data?.wave);
   if (recorder.busy) paintRecording();
@@ -295,16 +305,17 @@ window.addEventListener('pagehide', () => { if (recorder.active) recorder.stop()
 
 // Small read-only diagnostics surface for smoke tests and bug reports.
 window.AlgoAnimate = Object.freeze({
-  version: '0.02',
+  version: '0.03',
   diagnostics: () => ({
     source: audio.kind, seed: artwork.drawnSeed, engine: artwork.drawnMode,
     targetSeed: artwork.current?.seed, compositions: artwork.sceneCount,
     paths: artwork.current?.paths.length || 0, worker: Boolean(builder.worker), building,
-    dimensions: [art.width, art.height], features: { level: features.level, bass: features.bass, mid: features.mid, treble: features.treble },
+    dimensions: [art.width, art.height], features: { level: features.level, bass: features.bass,
+      mid: features.mid, treble: features.treble, rms: features.rms, active: features.active },
     recording: recorder.active, recordingBusy: recorder.busy,
     recordedBytes: recorder.result?.blob.size || 0, recordingType: recorder.result?.type || recorder.mimeType,
     drawing: { ...artwork.stats, layers: artwork.layers.length, cycles: artwork.turns,
-      queuedSeed: artwork.queued?.seed || null, flowing: artwork.flowing },
+      queuedSeed: artwork.queued?.seed || null, queuedSeconds: artwork.queuedSeconds, flowing: artwork.flowing },
     fps, maxTakeSeconds: MAX_TAKE_SECONDS
   })
 });

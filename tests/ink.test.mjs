@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { markerGeometry, strokeWindow, strokeSchedule, inkWindow } from '../js/ink.js';
 import { AnimatedArtwork } from '../js/scenes.js';
 import { SILENCE } from '../js/features.js';
+const STEADY_SOUND = { ...SILENCE, active: true, rms: 0.1 };
 
 test('partial marker lines travel by distance and preserve corners and subpaths', () => {
   const geometry = markerGeometry('M 0 0 L 100 0 L 100 100');
@@ -66,14 +67,13 @@ function scene(seed = 'first', y = 0) {
       stroke: '#000', opacity: 0.6, width: 3, lineCap: 'round' })) };
 }
 
-test('continuous ink advances every frame without needing a new seed', () => {
+test('audible steady sound keeps the ink moving without needing a new seed', () => {
   const { art, commands } = artwork();
   art.setScene(scene(), true);
   const frames = new Set();
   for (let i = 0; i < 300; i++) {
     commands.length = 0;
-    // Even a quiet connected source keeps the marker tracing its current seed.
-    art.draw(SILENCE, 1 / 30, 0.6, false, 1, true);
+    art.draw(STEADY_SOUND, 1 / 30, 0.6, false, 1, true);
     frames.add(JSON.stringify(commands));
     assert.ok(art.stats.penTips > 0, 'At least one pen is drawing in every frame');
     assert.ok(art.stats.inkLength > 0, 'The paper never goes blank between cycles');
@@ -86,14 +86,44 @@ test('continuous ink advances every frame without needing a new seed', () => {
 
 test('new seeds wait for the pen boundary and do not restart a live stroke', () => {
   const { art } = artwork();
-  art.setScene(scene(), true); art.draw(SILENCE, 0.2, 0, false, 1, true);
+  art.setScene(scene(), true); art.draw(STEADY_SOUND, 0.85, 0, false, 1, true);
   const progress = art.activeLayer.age;
   art.setScene(scene('next', 20));
   assert.equal(art.drawnSeed, 'first'); assert.equal(art.activeLayer.age, progress);
-  art.draw(SILENCE, 0.5, 0, false, 1, true); assert.equal(art.drawnSeed, 'first');
-  art.draw(SILENCE, 0.35, 0, false, 1, true); assert.equal(art.drawnSeed, 'next');
+  art.draw(STEADY_SOUND, 0.1, 0, false, 1, true); assert.equal(art.drawnSeed, 'first');
+  art.draw(STEADY_SOUND, 0.1, 0, false, 1, true); assert.equal(art.drawnSeed, 'next');
   assert.ok(Math.abs(art.activeLayer.age - 0.05) < 1e-9);
   assert.ok(art.stats.penTips > 0);
+});
+
+test('fresh targets are prepared near the boundary and late work has a bounded wait', () => {
+  const { art } = artwork(); art.setScene(scene(), true);
+  art.draw(STEADY_SOUND, 3.5, 0, false, 4, true);
+  assert.equal(art.needsScene(4), false);
+  art.draw(STEADY_SOUND, 0.35, 0, false, 4, true);
+  assert.equal(art.needsScene(4), true);
+  assert.equal(art.needsScene(4, true), false, 'Gentle drawing uses its slower actual cadence');
+  art.draw(STEADY_SOUND, 0.2, 0, false, 4, true);
+  // Simulate a worker finishing just after the previous cycle has ended.
+  const oldLayer = art.activeLayer;
+  art.setScene(scene('stale', 30)); art.setScene(scene('latest', 40));
+  art.draw(STEADY_SOUND, 0.1, 0, false, 4, true);
+  assert.notEqual(art.drawnSeed, 'latest');
+  art.draw(STEADY_SOUND, 0.1, 0, false, 4, true);
+  assert.equal(art.drawnSeed, 'latest');
+  assert.ok(art.layers.includes(oldLayer), 'Existing ink finishes on its own layer');
+  assert.ok(art.layers.length <= 3);
+});
+
+test('a worker response arriving during silence cannot alter the frozen ink', () => {
+  const { art, commands } = artwork(); art.setScene(scene(), true);
+  art.draw(STEADY_SOUND, 0.4, 0, false, 1, true);
+  commands.length = 0; art.draw(SILENCE, 0.1, 0, false, 1, false);
+  const frozen = JSON.stringify(commands), progress = art.activeLayer.age;
+  art.setScene(scene('late', 50));
+  commands.length = 0; art.draw(SILENCE, 1, 0, false, 1, false);
+  assert.equal(JSON.stringify(commands), frozen); assert.equal(art.activeLayer.age, progress);
+  art.discardQueued(); assert.equal(art.current.seed, 'first'); assert.equal(art.queued, null);
 });
 
 test('pausing holds the exact drawing frame and gentle motion slows the pens', () => {

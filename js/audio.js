@@ -154,7 +154,10 @@ export class AudioInput {
   }
 
   read() {
-    if (!this.kind || !this.analyser) return null;
+    if (!this.kind || !this.analyser || this.context.state !== 'running'
+      || (this.kind === 'file' && this.mediaElement?.paused)
+      || (this.stream && !this.stream.getAudioTracks().some(track =>
+        track.readyState === 'live' && track.enabled !== false && !track.muted))) return null;
     this.analyser.getFloatTimeDomainData(this.wave);
     this.analyser.getFloatFrequencyData(this.frequencies);
     return { wave: this.wave, frequencies: this.frequencies, sampleRate: this.context.sampleRate };

@@ -38,6 +38,49 @@ async function setRange(id, value) {
     control.value = String(value); control.dispatchEvent(new Event('input', { bubbles: true }));
   }, { id, value });
 }
+async function connectControlledTab() {
+  // Stub only the browser's share dialog. The captured track, analyser,
+  // silence and canvas below are real browser audio/video APIs.
+  await page.evaluate(async () => {
+    const context = new AudioContext(), oscillator = context.createOscillator(), gain = context.createGain();
+    const destination = context.createMediaStreamDestination();
+    oscillator.frequency.value = 220; gain.gain.value = 0.25;
+    oscillator.connect(gain); gain.connect(destination); oscillator.start(); await context.resume();
+    const canvas = document.createElement('canvas'); canvas.width = canvas.height = 10;
+    canvas.getContext('2d').fillRect(0, 0, 10, 10);
+    const video = canvas.captureStream(1);
+    const stream = new MediaStream([...destination.stream.getAudioTracks(), ...video.getVideoTracks()]);
+    window.testSignal = { context, oscillator, gain, stream };
+    navigator.mediaDevices.getDisplayMedia = async () => stream;
+  });
+  await page.click('#connectTab');
+  await page.waitForFunction(() => window.AlgoAnimate.diagnostics().source === 'tab' && window.AlgoAnimate.diagnostics().drawing.flowing);
+}
+async function silenceCapturedTab() {
+  await page.evaluate(() => {
+    window.silenceStarted = performance.now();
+    window.testSignal.gain.gain.setValueAtTime(0, window.testSignal.context.currentTime);
+  });
+  await page.waitForFunction(() => !window.AlgoAnimate.diagnostics().drawing.flowing);
+  const delay = await page.evaluate(() => performance.now() - window.silenceStarted);
+  assert.ok(delay < 350, `Captured silence stops the pens promptly (${Math.round(delay)} ms)`);
+  await page.evaluate(() => {
+    window.frozenInk = document.getElementById('art').toDataURL();
+    window.frozenProgress = window.AlgoAnimate.diagnostics().drawing.progress;
+  });
+  await page.waitForTimeout(500);
+  assert.ok(await page.evaluate(() => document.getElementById('art').toDataURL() === window.frozenInk), 'Silent captured audio holds the exact painted pixels');
+  assert.equal((await state()).drawing.progress, await page.evaluate(() => window.frozenProgress));
+  assert.equal((await state()).source, 'tab', 'Silence does not disconnect capture');
+  assert.equal((await state()).drawing.queuedSeed, null, 'Silence drops obsolete future targets');
+  return delay;
+}
+async function resumeCapturedTab() {
+  const before = (await state()).drawing.progress;
+  await page.evaluate(() => window.testSignal.gain.gain.setValueAtTime(0.25, window.testSignal.context.currentTime));
+  await page.waitForFunction(() => window.AlgoAnimate.diagnostics().drawing.flowing);
+  await page.waitForFunction(progress => window.AlgoAnimate.diagnostics().drawing.progress !== progress, before);
+}
 async function motionSamples(count = 20, spacing = 80) {
   const samples = await page.evaluate(async ({ count, spacing }) => {
     const art = document.getElementById('art'), thumbnail = document.createElement('canvas');
@@ -108,6 +151,12 @@ try {
   await page.screenshot({ path: resolve(results, 'desktop-live.png'), fullPage: true });
   console.log('Demo produces measured audio, a waveform and sound-derived composition changes.');
 
+  await connectControlledTab();
+  const tabSilenceStopMs = await silenceCapturedTab();
+  await page.waitForFunction(() => document.getElementById('liveLabel').textContent.includes('DRAWING PAUSED'));
+  await resumeCapturedTab();
+  console.log(`Captured audio pauses/resumes the actual ink; silence stopped drawing in ${Math.round(tabSilenceStopMs)} ms.`);
+
   const defaultMotion = await motionSamples(60, 100);
   await writeFile(resolve(results, 'continuous-ink.json'), JSON.stringify(defaultMotion, null, 2));
   const enginesInMotion = {};
@@ -129,8 +178,8 @@ try {
   assert.equal(await page.isDisabled('#includeWaveform'), true);
   await page.waitForTimeout(10000); await page.click('#stopRecording');
   await page.waitForFunction(() => window.AlgoAnimate.diagnostics().recordedBytes > 10000 && !window.AlgoAnimate.diagnostics().recordingBusy);
-  assert.equal((await state()).source, 'demo', 'Stopping a take retains the sound source');
-  const firstPath = resolve(results, 'demo-landscape.webm');
+  assert.equal((await state()).source, 'tab', 'Stopping a take retains the sound source');
+  const firstPath = resolve(results, 'tab-landscape.webm');
   const first = await download(firstPath); checkTake(first, 1400, 1000);
   const decodedFrames = execFileSync('ffmpeg', ['-v', 'error', '-i', firstPath, '-an', '-vf', 'fps=10,scale=200:-1', '-f', 'framemd5', '-'], { encoding: 'utf8' })
     .split('\n').filter(line => line && !line.startsWith('#')).map(line => line.split(',').at(-1).trim());
@@ -167,6 +216,20 @@ try {
   await page.click('#closePreview');
   console.log('Landscape take exports valid video and audio; source remains connected.');
 
+  await page.click('#record'); await page.waitForFunction(() => window.AlgoAnimate.diagnostics().recording);
+  await page.waitForTimeout(700);
+  const recordingSilenceStopMs = await silenceCapturedTab();
+  assert.equal((await state()).recording, true, 'A silent interval retains the take');
+  await resumeCapturedTab(); await page.waitForTimeout(700);
+  await page.click('#stopRecording'); await page.waitForFunction(() => !window.AlgoAnimate.diagnostics().recordingBusy);
+  const pausedPath = resolve(results, 'tab-pause-resume.webm');
+  checkTake(await download(pausedPath), 1400, 1000);
+  const pausedVideo = spawnSync('ffmpeg', ['-hide_banner', '-i', pausedPath, '-an', '-vf', 'freezedetect=n=-100dB:d=0.3', '-f', 'null', '-'], { encoding: 'utf8' });
+  assert.equal(pausedVideo.status, 0); assert.ok(pausedVideo.stderr.includes('freeze_start'), 'The recorded artwork holds during actual source silence');
+  const pausedAudio = spawnSync('ffmpeg', ['-hide_banner', '-i', pausedPath, '-vn', '-af', 'silencedetect=noise=-60dB:d=0.3', '-f', 'null', '-'], { encoding: 'utf8' });
+  assert.equal(pausedAudio.status, 0); assert.ok(pausedAudio.stderr.includes('silence_start'), 'The export preserves the corresponding silent audio');
+  console.log('Recording preserves silent audio with held ink, then resumes drawing with the sound.');
+
   await select('orientation', 'portrait');
   await page.check('#includeWaveform');
   await page.click('#record'); await page.waitForFunction(() => window.AlgoAnimate.diagnostics().recording);
@@ -188,7 +251,7 @@ try {
   });
   await page.click('#connectTab');
   await page.waitForFunction(() => document.getElementById('message').textContent.includes('cancelled'));
-  assert.equal((await state()).source, 'demo', 'Cancel preserves existing audio');
+  assert.equal((await state()).source, 'tab', 'Cancel preserves existing audio');
   await page.evaluate(() => {
     navigator.mediaDevices.getDisplayMedia = async () => {
       const canvas = document.createElement('canvas'); canvas.getContext('2d').fillRect(0, 0, 10, 10);
@@ -198,11 +261,12 @@ try {
   });
   await page.click('#connectTab');
   await page.waitForFunction(() => document.getElementById('message').textContent.includes('No audio was shared'));
-  assert.equal((await state()).source, 'demo');
+  assert.equal((await state()).source, 'tab');
   assert.equal(await page.evaluate(() => window.testEmptyCapture.getVideoTracks()[0].readyState), 'ended');
   console.log('Denied capture and missing shared audio recover without stopping a working source.');
 
   await page.click('#stopAudio');
+  await page.evaluate(async () => { window.testSignal.oscillator.stop(); await window.testSignal.context.close(); });
   assert.equal((await state()).source, null);
   await page.setInputFiles('#fileInput', { name: 'test-tone.wav', mimeType: 'audio/wav', buffer: wav() });
   await page.waitForFunction(() => window.AlgoAnimate.diagnostics().source === 'file' && window.AlgoAnimate.diagnostics().features.level > 0.1);
@@ -230,8 +294,9 @@ try {
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'Narrow mobile has no horizontal overflow');
   await page.screenshot({ path: resolve(results, 'mobile-landscape.png'), fullPage: true });
   assert.deepEqual(errors, [], 'No uncaught application errors');
-  const summary = { version: '0.02', desktop: 'passed', engines: 8, demoAnalysis: 'passed',
+  const summary = { version: '0.03', desktop: 'passed', engines: 8, demoAnalysis: 'passed',
     continuousMarkerDrawing: enginesInMotion, noVideoHolds: 'passed', minimumChangedPixelsPer400ms: minimumChangedPixels,
+    tabSilenceStopMs, recordingSilenceStopMs, exactSilentFrameHold: 'passed', capturedPauseResumeExport: 'passed',
     videoAudioExport: 'passed', portraitWaveform: 'passed', permissionRecovery: 'passed',
     fileReplayAndAutoFinish: 'passed', mobileWidths: [360, 390], errors, state: await state(),
     landscapeExport: first.streams.map(({ codec_name, codec_type, width, height }) => ({ codec_name, codec_type, width, height })) };

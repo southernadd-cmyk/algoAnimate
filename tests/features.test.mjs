@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { measureAudio, FeatureTracker, SoundSeed, SILENCE, evolutionInterval } from '../js/features.js';
+import { measureAudio, FeatureTracker, SoundSeed, SoundGate, SILENCE, evolutionInterval, SOUND_RELEASE_SECONDS } from '../js/features.js';
 import { pathBounds } from '../js/scenes.js';
 
 function signal(hz, amplitude = 0.2, sampleRate = 48000) {
@@ -75,6 +75,39 @@ test('onset detection responds to a new sound after silence', () => {
   const first = tracker.update(data.wave, data.frequencies, 48000, 1 / 30);
   const next = tracker.update(data.wave, data.frequencies, 48000, 1 / 30);
   assert.equal(first.beat, true); assert.equal(next.beat, false);
+});
+
+test('silence closes the pen gate without waiting for the smoothed volume tail', () => {
+  for (const dt of [1 / 30, 1 / 60]) {
+    const tracker = new FeatureTracker(), gate = new SoundGate(), data = signal(1000, 0.3);
+    let f;
+    for (let i = 0; i < 30; i++) {
+      f = tracker.update(data.wave, data.frequencies, 48000, dt, 1, 1);
+      gate.update(f.active, dt);
+    }
+    assert.equal(gate.open, true);
+    const quiet = { wave: new Float32Array(2048), frequencies: new Float32Array(1024).fill(-Infinity) };
+    let elapsed = 0;
+    while (gate.open && elapsed < 1) {
+      f = tracker.update(quiet.wave, quiet.frequencies, 48000, dt, 1, 1);
+      gate.update(f.active, dt); elapsed += dt;
+    }
+    assert.ok(elapsed <= SOUND_RELEASE_SECONDS + dt + 1e-9);
+    assert.ok(f.level > 0.1, 'Visual smoothing is still decaying when the pens stop');
+    assert.equal(f.active, false);
+    assert.equal(gate.update(true, dt), true, 'Sound reopens the gate immediately');
+  }
+});
+
+test('the sound gate joins tiny gaps but never runs without an available source', () => {
+  const gate = new SoundGate();
+  assert.equal(gate.update(false, 0.5), false);
+  assert.equal(gate.update(true, 0.03), true);
+  assert.equal(gate.update(false, 0.02), true);
+  assert.equal(gate.update(false, 0.02), true);
+  assert.equal(gate.update(false, 0.1), false);
+  gate.update(true, 0.03);
+  assert.equal(gate.update(true, 0.001, false), false, 'A paused or disconnected source closes immediately');
 });
 
 test('controls and recorded path bounds handle their edge cases', () => {

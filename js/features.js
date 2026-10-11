@@ -7,6 +7,21 @@ export function hash(text) {
   return value >>> 0;
 }
 
+// The drawing gate uses current sound, not the longer visual smoothing tail.
+// A short release joins tiny gaps between audio blocks and percussion hits.
+export const SOUND_FLOOR = 0.0015;
+export const SOUND_RELEASE_SECONDS = 0.09;
+export class SoundGate {
+  constructor() { this.reset(); }
+  reset() { this.remaining = 0; this.open = false; }
+  update(active, dt, available = true) {
+    if (!available) { this.reset(); return false; }
+    this.remaining = active ? SOUND_RELEASE_SECONDS : Math.max(0, this.remaining - dt);
+    this.open = this.remaining > 0;
+    return this.open;
+  }
+}
+
 export function measureAudio(wave, decibels, sampleRate, fftSize, previous) {
   let squareSum = 0, peak = 0, total = 0, weighted = 0, rise = 0, priorTotal = 0;
   const linear = new Float32Array(decibels.length);
@@ -57,7 +72,7 @@ export class FeatureTracker {
     const measured = measureAudio(wave, frequencies, sampleRate, wave.length, this.previous);
     this.previous = measured.linear;
     this.time += dt;
-    const active = measured.rms > 0.0015;
+    const active = measured.rms > SOUND_FLOOR;
     const beat = active && measured.flux > Math.max(0.16, this.fluxBaseline * 1.65)
       && this.time - this.lastBeat > 0.22;
     if (beat) this.lastBeat = this.time;

@@ -1,4 +1,4 @@
-# ALGO / ANIMATE — v0.02
+# ALGO / ANIMATE — v0.03
 
 **Make sound visible.** A browser-only audio experiment using the golden ratio
 and ALGO / ART's expressive marker renderer.
@@ -45,15 +45,20 @@ its actual container. The canvas shape is preserved (1400 × 1000 landscape or
   curves, wobble, overdraw, ink colours, opacity and dryness.
 - Ink stays in place after it is drawn. Older strokes recede from their start
   while fresh ink grows from the pen tips, so the paper keeps changing without
-  whole-image holds or crossfades. A new sound-derived composition is prepared
-  during the current drawing and picked up on the next pen cycle.
+  whole-image holds or crossfades while sound is present. A fresh sound-derived
+  composition is prepared just before the next pen cycle. A late target joins
+  within 200 ms of drawing time, while existing ink finishes on its own layer.
 - Loudness and spectral changes control pen pace; bass adds pressure to larger
   strokes and treble to finer marks. Pressure is captured when each stroke
   begins, so completed marks do not float or pulse around the paper.
-- Smoothing and pen progress use elapsed time. A steady or silent connected
-  source keeps the pens working with its current seed; new sound changes the
-  seed. Pausing a file or disconnecting freezes the actual drawing frame.
-  Gentle motion slows the pens and reduces their pressure response.
+- Drawing stops when the incoming audio goes silent, including when a video
+  in a captured tab is paused. The gate uses current RMS above 0.0015 with a
+  90 ms release for tiny gaps; visual smoothing cannot keep the pens running.
+  Source capture/analysis adds a small detection delay. Pausing an uploaded file,
+  a muted track or a suspended audio context closes the gate immediately.
+  Silence freezes the actual pixels and discards obsolete pending targets.
+  Sound resumes drawing from the held frame; a steady audible sound can keep
+  tracing its current seed. Gentle motion slows the pens and pressure response.
 - Canvas video and a clone of the Web Audio recording track are combined into a
   `MediaStream`. Stopping a take preserves the connected sound source. Chrome's
   streaming WebM export receives duration metadata so players report its length;
@@ -61,7 +66,7 @@ its actual container. The canvas shape is preserved (1400 × 1000 landscape or
 
 The mapping is deterministic for the **same ordered feature measurements and
 settings**. Live capture timing, noise, sample rates and browser FFT behaviour
-can differ, so v0.02 does not promise bit-identical videos across devices or
+can differ, so v0.03 does not promise bit-identical videos across devices or
 mathematical uniqueness for every possible sound. Frame rate targets 30 FPS and
 depends on the device, engine and number of marks. This is a prototype.
 
@@ -93,7 +98,9 @@ npm test
 ```
 
 GitHub Actions also runs a Chromium smoke test covering every composition
-engine, continuous marker drawing between seed changes, live demo analysis,
+engine, continuous marker drawing between seed changes, captured-audio silence
+and resume, exact frozen artwork pixels, silent intervals in exported video,
+live demo analysis,
 recording with audio, waveform export, source
 cleanup, permission errors, audio-file replay, portrait rendering and mobile
 layout. It inspects the exported video with `ffprobe`, saves screenshots and a
