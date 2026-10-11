@@ -48,7 +48,9 @@ its actual container. The canvas shape is preserved (1400 × 1000 landscape or
 - Smoothing uses elapsed time. The composition interval limits seed updates;
   it does not guarantee a different composition on every beat.
 - Canvas video and a clone of the Web Audio recording track are combined into a
-  `MediaStream`. Stopping a take preserves the connected sound source.
+  `MediaStream`. Stopping a take preserves the connected sound source. Chrome's
+  streaming WebM export receives duration metadata so players report its length;
+  the large media payload is preserved in Blob slices without re-encoding it.
 
 The mapping is deterministic for the **same ordered feature measurements and
 settings**. Live capture timing, noise, sample rates and browser FFT behaviour

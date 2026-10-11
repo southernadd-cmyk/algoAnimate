@@ -15,6 +15,7 @@ let requestedSeed = DEFAULT_SETTINGS.seed, generation = 0, building = false;
 let clock = 0, lastSceneTime = 0, previousFrame = 0, uiTime = 0, onsetUntil = 0;
 let frames = 0, fpsStart = performance.now(), fps = 0, recordingWithWaveform = false;
 let startRecordPending = false;
+const waveHistory = [];
 const names = { tab: 'Browser tab audio', microphone: 'Microphone', demo: 'Demo · 108 BPM' };
 
 function message(text, error = false) {
@@ -64,6 +65,7 @@ function syncControls() {
 
 function resetSound() {
   tracker.reset(); soundSeed.reset(); features = SILENCE;
+  waveHistory.length = 0;
   lastSceneTime = clock - evolutionInterval(+$('evolution').value) + 0.45;
 }
 
@@ -155,17 +157,25 @@ $('gentle').checked = window.matchMedia('(prefers-reduced-motion: reduce)').matc
 
 function drawWaveform(data) {
   const width = waveform.width, height = waveform.height;
+  let low = 0, high = 0;
+  if (data) for (const value of data) { low = Math.min(low, value); high = Math.max(high, value); }
+  waveHistory.push([low, high]);
+  if (waveHistory.length > 120) waveHistory.shift();
   waveContext.fillStyle = '#222620'; waveContext.fillRect(0, 0, width, height);
   waveContext.strokeStyle = '#454b3e'; waveContext.lineWidth = 1;
   waveContext.setLineDash([2, 6]);
   waveContext.beginPath(); waveContext.moveTo(0, height / 2); waveContext.lineTo(width, height / 2); waveContext.stroke();
   waveContext.setLineDash([]);
-  waveContext.strokeStyle = '#d7ed99'; waveContext.lineWidth = 1.8;
+  // A rolling min/max waveform keeps short sounds visible between their peaks.
+  // Each column is measured from real incoming samples, not a decorative trace.
+  const step = width / 120;
+  waveContext.strokeStyle = '#d7ed99'; waveContext.lineWidth = step * 0.72;
   waveContext.beginPath();
-  for (let i = 0; i < width; i++) {
-    const value = data ? data[Math.floor(i / width * data.length)] : 0;
-    const y = height / 2 - clamp(value * 2.5, -1, 1) * height * 0.44;
-    if (i === 0) waveContext.moveTo(i, y); else waveContext.lineTo(i, y);
+  for (let i = 0; i < waveHistory.length; i++) {
+    const [min, max] = waveHistory[i];
+    const x = (120 - waveHistory.length + i + 0.5) * step;
+    waveContext.moveTo(x, height / 2 - clamp(max * 2.5, 0, 1) * height * 0.44);
+    waveContext.lineTo(x, height / 2 - clamp(min * 2.5, -1, 0) * height * 0.44);
   }
   waveContext.stroke();
 }

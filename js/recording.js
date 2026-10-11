@@ -1,3 +1,5 @@
+import { fixWebmDuration } from './webm.js';
+
 export const MAX_TAKE_SECONDS = 180;
 export function supportedRecordingType(Recorder = globalThis.MediaRecorder) {
   if (!Recorder?.isTypeSupported) return null;
@@ -14,7 +16,7 @@ export class VideoRecorder {
     this.mimeType = supportedRecordingType();
   }
   get active() { return Boolean(this.recorder && this.recorder.state !== 'inactive'); }
-  get busy() { return this.active || Boolean(this.stopping); }
+  get busy() { return this.active || Boolean(this.stopping) || Boolean(this.finishing); }
   start(canvas, audio) {
     if (!this.mimeType || !canvas.captureStream) throw new Error('Video recording is unavailable in this browser. Try desktop Chrome.');
     if (this.busy) return;
@@ -50,20 +52,22 @@ export class VideoRecorder {
     this.recorder.stop(); this.onChange();
     return this.stopping;
   }
-  finish() {
+  async finish() {
+    this.finishing = true;
     clearTimeout(this.limit);
     const seconds = (performance.now() - this.started) / 1000;
     const type = this.recorder.mimeType || this.mimeType;
-    const blob = new Blob(this.chunks, { type });
+    let blob = new Blob(this.chunks, { type });
+    this.chunks = []; this.releaseTracks();
+    blob = await fixWebmDuration(blob, seconds);
     if (blob.size && !this.recordingError) {
       if (this.result) URL.revokeObjectURL(this.result.url);
       this.result = { blob, url: URL.createObjectURL(blob), type, seconds,
         extension: type.includes('mp4') ? 'mp4' : 'webm' };
     } else if (!this.recordingError) this.onError(new Error('The recording was empty. Play some sound and try again.'));
-    this.chunks = []; this.releaseTracks();
     this.recorder = null;
     const resolve = this.resolveStop;
-    this.resolveStop = null; this.stopping = null;
+    this.resolveStop = null; this.stopping = null; this.finishing = false;
     resolve?.(this.result); this.onChange();
   }
   releaseTracks() { this.stream?.getTracks().forEach(track => track.stop()); this.stream = null; }
