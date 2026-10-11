@@ -7,7 +7,7 @@ import { chromium } from 'playwright';
 
 const root = resolve('.'), results = resolve('test-results');
 await mkdir(results, { recursive: true });
-const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.woff2': 'font/woff2' };
+const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.mp3': 'audio/mpeg' };
 const server = createServer(async (req, res) => {
   try {
     const pathname = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
@@ -753,7 +753,7 @@ try {
     await touchContext.close();
   }
   assert.deepEqual(errors, [], 'No uncaught application errors');
-  const summary = { version: '0.10', desktop: 'passed', engines: 8, pens: 24, minimumMeasuredFPS: measuredFPS,
+  const summary = { version: '0.12', desktop: 'passed', engines: 8, pens: 24, minimumMeasuredFPS: measuredFPS,
     compositionDensity, audioFidelity,
     calibratedMeters, quietTreble, demoBandPeaks, meterSilenceAndSensitivity: 'passed',
     responsiveEngineMeters: 'passed', clearCanvasKeepsAudio: 'passed',

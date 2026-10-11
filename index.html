@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#ece8df">
   <meta name="description" content="One sound, eight layered AlgoArt engines and 24 marker pens. Listen, animate, record and export, entirely in your browser.">
-  <meta property="og:title" content="ALGO / ANIMATE — Sound, in living ink">
+  <meta property="og:title" content="ALGO / ANIMATE — Sound, in living ink.">
   <meta property="og:description" content="A live drawing studio. Eight engines listen to your sound, each with its own changing ink and pen.">
   <meta property="og:type" content="website">
-  <title>ALGO / ANIMATE — Sound into marks</title>
+  <title>ALGO / ANIMATE — Sound, in living ink.</title>
   <link rel="icon" href="./favicon.svg" type="image/svg+xml">
   <link rel="preload" href="./fonts/AlgoArt-Marker-Regular.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="./css/style.css">
@@ -22,7 +22,7 @@
       <h1>Sound, in living ink.</h1>
       <p class="intro-note">One sound. Eight voices. 24 pens. <span>Every drawing finds a new colour.</span></p>
     </div>
-    <div class="masthead-note"><span class="edition">v0.11 · LIVE DRAWING STUDIO</span><a href="https://southernadd-cmyk.github.io/algoart/" target="_blank" rel="noopener">From ALGO / ART ↗</a></div>
+    <div class="masthead-note"><span class="edition">v0.12 · LIVE DRAWING STUDIO</span><a href="https://southernadd-cmyk.github.io/algoart/" target="_blank" rel="noopener">From ALGO / ART ↗</a></div>
   </header>
   <main>
     <div class="studio">
@@ -50,14 +50,20 @@
       <aside class="desk" aria-label="Audio and artwork controls">
         <section class="desk-section source-section" id="sources" tabindex="-1">
           <div class="section-label"><span>01 / AUDIO IN</span><h2>Find your sound.</h2></div>
-          <p class="section-note">Connect a source. The pens take it from here.</p>
+          <p class="section-note">Start with a lo-fi demo, or bring your own sound.</p>
           <div class="source-main">
-          <button type="button" class="source-button primary" id="connectTab"><span class="button-icon" aria-hidden="true">↗</span><span>Browser tab<small>Share a tab and its audio</small></span><span aria-hidden="true">→</span></button>
+          <button type="button" class="source-button primary" id="playDemo"><span class="button-icon" aria-hidden="true">▶</span><span><span id="demoButtonLabel">Try demo sound</span><small>Three lo-fi tracks. One click to draw.</small></span><span aria-hidden="true">→</span></button>
+          <button type="button" class="source-button" id="connectTab"><span class="button-icon" aria-hidden="true">↗</span><span>Browser tab<small>Share a tab and its audio · desktop Chrome</small></span><span aria-hidden="true">→</span></button>
           <button type="button" class="source-button" id="chooseFile"><span class="button-icon" aria-hidden="true">＋</span><span>Audio file<small>Play from your device</small></span><span aria-hidden="true">→</span></button>
           </div>
           <input type="file" id="fileInput" accept="audio/*,.mp3,.wav,.ogg,.m4a,.flac,.aac,.webm,.mp4" hidden>
-          <div class="source-pair"><button type="button" id="connectMic">Microphone</button><button type="button" id="playDemo">Try demo sound</button></div>
+          <button type="button" class="microphone-button" id="connectMic">Use microphone</button>
           <div class="source-summary"><span class="source-dot" id="sourceDot" aria-hidden="true"></span><span id="sourceName">No audio connected</span><button type="button" id="stopAudio" class="text-button" disabled>Disconnect</button></div>
+          <div class="demo-deck" id="demoDeck" hidden>
+            <div class="demo-track"><span id="demoTrackNumber">01 / 03</span><a id="demoTrackLink" href="https://holiznacc0.bandcamp.com/track/bubbles" target="_blank" rel="noopener">Bubbles</a><button type="button" id="nextDemo" class="text-button" aria-label="Play the next demo track">Next ↗</button></div>
+            <audio id="demoPlayer" controls preload="none" aria-label="Lo-fi demo music player"></audio>
+            <p class="demo-credit">Music by <a href="https://holiznacc0.bandcamp.com/album/public-domain-lo-fi" target="_blank" rel="noopener">HoliznaCC0</a> · <a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener">CC0</a> · three tracks on rotation</p>
+          </div>
           <audio id="filePlayer" controls preload="metadata" hidden aria-label="Uploaded audio file player"></audio>
           <details class="source-help"><summary>How browser audio works</summary><p>Play sound in another tab. Choose <strong>Browser tab</strong>, select that tab and enable <strong>Share tab audio</strong>. Return here to watch. Use desktop Chrome for tab capture; files and microphone work in more browsers.</p><p>Tab sharing also asks for a video track. AlgoAnimate uses the audio; your recording contains the generated artwork.</p></details>
           <p id="message" class="message" role="status" aria-live="polite" hidden></p>
@@ -80,7 +86,7 @@
       </aside>
     </div>
   </main>
-  <footer><span>ALGO / ANIMATE <span class="footer-dot">·</span> v0.11</span><span>Sound stays in your browser. No account. No uploads.</span><a href="https://github.com/southernadd-cmyk/algoAnimate" target="_blank" rel="noopener">Source on GitHub ↗</a></footer>
+  <footer><span>ALGO / ANIMATE <span class="footer-dot">·</span> v0.12</span><span>Sound stays in your browser. No account. No uploads.</span><a href="https://github.com/southernadd-cmyk/algoAnimate" target="_blank" rel="noopener">Source on GitHub ↗</a></footer>
   <dialog id="previewDialog"><div class="dialog-heading"><h2>Your recorded take</h2><button type="button" id="closePreview" aria-label="Close recording preview">✕</button></div><video id="recordingPreview" controls playsinline></video></dialog>
   <script src="./vendor/algoart/phi.js"></script>
   <script src="./vendor/algoart/random.js"></script>

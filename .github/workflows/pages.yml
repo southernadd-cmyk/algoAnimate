@@ -31,7 +31,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: v0.11-smoke-test
+          name: v0.12-smoke-test
           path: test-results/
           if-no-files-found: ignore
   deploy:
@@ -52,7 +52,7 @@ jobs:
         run: |
           mkdir -p dist
           cp index.html favicon.svg .nojekyll dist/
-          cp -R css js fonts vendor dist/
+          cp -R css js fonts vendor media dist/
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
