@@ -4,7 +4,7 @@ import { SceneBuilder, DEFAULT_SETTINGS } from './scenes.js';
 import { LayeredArtwork, ensembleSettings } from './ensemble.js';
 import { VideoRecorder, MAX_TAKE_SECONDS } from './recording.js';
 import { StyleDeck, styleSettings } from './styles.js';
-import { BandMeters, BAND_KEYS, meterLevel } from './meters.js';
+import { BandMeters, SpectralChangeMeter, BAND_KEYS, meterLevel } from './meters.js';
 import { FrameClock } from './frame-clock.js';
 
 const $ = id => document.getElementById(id);
@@ -16,6 +16,7 @@ const artwork = new LayeredArtwork(art), builder = new SceneBuilder();
 const styleDeck = new StyleDeck();
 const tracker = new FeatureTracker();
 const bandMeters = new BandMeters();
+const changeMeter = new SpectralChangeMeter();
 const soundGate = new SoundGate();
 let features = SILENCE, pending = false, fileURL = null, fileLabel = '', sourceLabel = '';
 let layoutGeneration = 0, preparing = false;
@@ -94,7 +95,7 @@ function syncControls() {
 }
 
 function resetSound() {
-  tracker.reset(); bandMeters.reset(); soundGate.reset(); artwork.resetSound(); features = SILENCE;
+  tracker.reset(); bandMeters.reset(); changeMeter.reset(); soundGate.reset(); artwork.resetSound(); features = SILENCE;
   waveHistory.length = 0;
 }
 
@@ -114,7 +115,7 @@ async function connect(action, label) {
 async function disconnect(ended = false) {
   if (pending) return;
   if (recorder.busy) await recorder.stop();
-  audio.stop(); tracker.reset(); bandMeters.reset(); soundGate.reset(); features = SILENCE;
+  audio.stop(); tracker.reset(); bandMeters.reset(); changeMeter.reset(); soundGate.reset(); features = SILENCE;
   message(ended ? 'The audio source ended. Your last drawing is held on the paper.' : 'Audio disconnected. Your last drawing is held on the paper.');
   syncControls();
 }
@@ -335,11 +336,13 @@ function updateUI(now) {
   $('seed').textContent = artwork.drawnSeed || DEFAULT_SETTINGS.seed;
   $('sceneCount').textContent = String(artwork.sceneCount).padStart(2, '0');
   $('activeLayers').textContent = artwork.voices.filter(voice => voice.flowing).length + ' / 8 DRAWING';
-  // Engine card bars display routed input response, not spectral bin averages.
+  // The onsets/change bar shows the unamplified *measured* positive
+  // spectral change observed since the last UI refresh, not the artistically
+  // smoothed flux multiplied by three. Also fixes the combined bass+onsets bar.
   const routedLevels = {
     bass: bandMeters.bands.bass.level, mid: bandMeters.bands.mid.level,
     treble: bandMeters.bands.treble.level, level: meterLevel(features.rms),
-    centroid: clamp(features.centroid / 0.7), flux: clamp(features.flux * 3)
+    centroid: clamp(features.centroid / 0.7), flux: changeMeter.take()
   };
   for (let index = 0; index < artwork.voices.length; index++) {
     const voice = artwork.voices[index], controls = layerControls[index];
@@ -347,7 +350,9 @@ function updateUI(now) {
       ? voice.route.inputs.reduce((sum, key) => sum + routedLevels[key], 0) / voice.route.inputs.length
       : 0;
     controls.meter.value = response;
-    controls.meter.setAttribute('aria-valuetext', Math.round(response * 100) + '% input response');
+    controls.meter.setAttribute('aria-valuetext', voice.route.id === 'network'
+      ? Math.round(response * 100) + '% measured positive spectral change (recent peak)'
+      : Math.round(response * 100) + '% input response');
     controls.row.classList.toggle('drawing', voice.flowing);
     controls.state.textContent = voice.flowing ? 'Drawing' : 'Holding';
     controls.row.title = voice.flowing ? 'Drawing from ' + voice.route.label.toLowerCase() : 'Ink held; listening for ' + voice.route.label.toLowerCase();
@@ -383,6 +388,7 @@ function frame(now) {
   if (features.beat) onsetUntil = now + 150;
   const available = Boolean(audio.kind) && !(audio.kind === 'file' && player.paused);
   bandMeters.update(features.bandRms, dt, features.active, available && Boolean(data));
+  changeMeter.sample(features.raw.flux, features.active, available && Boolean(data));
   const flowing = soundGate.update(features.active, dt, available && Boolean(data));
   for (const voice of artwork.updateSignals(features, dt, flowing && available && Boolean(data) && now >= clearHoldUntil)) {
     // Cancel only this route's obsolete work; the other engines keep drawing.
@@ -419,6 +425,8 @@ window.AlgoAnimate = Object.freeze({
     dimensions: [art.width, art.height], features: { level: features.level, bass: features.bass,
       mid: features.mid, treble: features.treble, rms: features.rms, active: features.active },
     bandMeters: { scale: [-60, 0], ...bandMeters.bands },
+    changeMeter: { value: changeMeter.value, pendingPeak: changeMeter.peak },
+    rawFlux: features.raw.flux,
     recording: recorder.active, recordingBusy: recorder.busy,
     recordingClock: frameClock.mode,
     clearHold: performance.now() < clearHoldUntil,

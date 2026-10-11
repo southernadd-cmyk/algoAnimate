@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { measureAudio, FeatureTracker } from '../js/features.js';
-import { BandMeters, BAND_KEYS, meterLevel } from '../js/meters.js';
+import { BandMeters, SpectralChangeMeter, BAND_KEYS, meterLevel } from '../js/meters.js';
 
 // Exact, bin-centred sine spectra after the analyser's periodic Blackman
 // window: central coefficient 0.21, sidebands 0.125 and 0.02 of peak amplitude.
@@ -56,6 +56,38 @@ test('meter attack and release are time based across frame rates', () => {
   }
   const slow = simulate(1 / 30), fast = simulate(1 / 60);
   assert.ok(slow.every((value, index) => Math.abs(value - fast[index]) < 1e-9));
+});
+
+test('spectral change meter shows unamplified measured peaks with no stale tail', () => {
+  const meter = new SpectralChangeMeter();
+  meter.sample(0.25, true); meter.sample(0.12, true); meter.sample(0.2, true);
+  assert.equal(meter.take(), 0.25, 'A 25% spectral rise must display 25%, not 75%');
+  assert.equal(meter.value, 0.25);
+  assert.equal(meter.take(), 0, 'No fresh measurements means no invented ongoing change');
+  meter.sample(0.04, true);
+  assert.equal(meter.take(), 0.04, 'Small genuine fluctuations are not exaggerated');
+  meter.sample(0.84, true); meter.sample(0.2, true);
+  assert.equal(meter.take(), 0.84, 'Real large transients still reach 84%');
+  meter.sample(1.2, true); assert.equal(meter.take(), 1);
+  meter.sample(NaN, true); assert.equal(meter.take(), 0);
+  meter.sample(0.6, true); meter.sample(0.2, false);
+  assert.equal(meter.take(), 0, 'Silence removes stale positive flux immediately');
+  meter.sample(0.8, true); meter.sample(0.7, true, false);
+  assert.equal(meter.take(), 0, 'Disconnected source removes queued peak immediately');
+});
+
+test('spectral change display is independent of artistic smoothing and sensitivity', () => {
+  const inputA = tone('bass', 0.2), inputB = tone('treble', 0.2);
+  const fast = new FeatureTracker(), slow = new FeatureTracker();
+  fast.update(inputA.wave, inputA.frequencies, inputA.sampleRate, 1 / 30, 0.25, 0);
+  slow.update(inputA.wave, inputA.frequencies, inputA.sampleRate, 1 / 30, 3, 1);
+  const a = fast.update(inputB.wave, inputB.frequencies, inputB.sampleRate, 1 / 30, 0.25, 0);
+  const b = slow.update(inputB.wave, inputB.frequencies, inputB.sampleRate, 1 / 30, 3, 1);
+  assert.equal(a.raw.flux, b.raw.flux, 'Measured positive spectral change does not use tuning knobs');
+  const one = new SpectralChangeMeter(), two = new SpectralChangeMeter();
+  one.sample(a.raw.flux, a.active); two.sample(b.raw.flux, b.active);
+  assert.equal(one.take(), two.take());
+  assert.ok(Math.abs(a.flux - b.flux) > 0.01, 'The old artistically smoothed meter could differ');
 });
 
 test('meter measurements ignore artistic sensitivity and smoothing settings', () => {

@@ -1,0 +1,33 @@
+name: Onset/change meter review checks
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'js/**'
+      - 'tests/**'
+      - '.github/workflows/onset-meter-check.yml'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax and unit checks
+        run: npm run check && npm test
+      - name: Install Playwright
+        run: npm install --no-save --package-lock=false playwright@1.64.0
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Ensure media inspection tools
+        run: command -v ffprobe || (sudo apt-get update && sudo apt-get install -y ffmpeg)
+      - name: Browser, audio, meter and recording checks
+        run: npm run test:browser
+      - name: Retain test recordings and screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: onset-meter-checks
+          path: test-results/
+          if-no-files-found: ignore

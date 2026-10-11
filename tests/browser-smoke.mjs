@@ -438,6 +438,14 @@ try {
   assert.ok(Math.abs((await state()).bandMeters.treble.db - quietTreble.db) < 0.6, 'Artistic controls do not amplify the measurement');
   await setRange('sensitivity', 100); await setRange('smoothing', 55);
   await setCapturedBands({ mid: 0.2 }); await page.waitForTimeout(350);
+  const onsetMeter = await page.evaluate(() => {
+    const meter = document.querySelector('.engine-row[data-engine="network"] meter');
+    const d = window.AlgoAnimate.diagnostics();
+    return { actual: meter.value, measured: d.changeMeter.value, label: meter.getAttribute('aria-valuetext') };
+  });
+  assert.equal(onsetMeter.actual, onsetMeter.measured, 'Onsets/change shows unamplified peak measured spectral change');
+  assert.match(onsetMeter.label, /measured positive spectral change/i, 'Onsets/change clearly states its measurement');
+  console.log('Engine change bar uses actual raw spectral flux without the old 3x amplification or artistic smoothing.');
   console.log('Real bass/mid/treble tones are calibrated equally; meters respond to actual amplitude and treble reaches its drawing engine.');
   await setRange('evolution', 100); await page.waitForTimeout(2400);
   // The signature covers an ordered window of 16 actual audio observations.
