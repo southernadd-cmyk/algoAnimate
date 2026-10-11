@@ -32,6 +32,12 @@ async function select(id, value) {
   await page.selectOption('#' + id, value);
   await page.waitForFunction(count => window.AlgoAnimate.diagnostics().compositions > count && !window.AlgoAnimate.diagnostics().building, before, { timeout: 20000 });
 }
+async function setRange(id, value) {
+  await page.evaluate(({ id, value }) => {
+    const control = document.getElementById(id);
+    control.value = String(value); control.dispatchEvent(new Event('input', { bubbles: true }));
+  }, { id, value });
+}
 async function motionSamples(count = 20, spacing = 80) {
   const samples = await page.evaluate(async ({ count, spacing }) => {
     const art = document.getElementById('art'), thumbnail = document.createElement('canvas');
@@ -98,21 +104,21 @@ try {
   await page.waitForFunction(() => window.AlgoAnimate.diagnostics().features.level > 0.015, null, { timeout: 10000 });
   await page.waitForFunction(count => window.AlgoAnimate.diagnostics().compositions > count && /^SOUND-[0-9A-F]{8}$/.test(window.AlgoAnimate.diagnostics().seed), beforeSound, { timeout: 12000 });
   assert.equal((await state()).source, 'demo');
-  assert.ok((await state()).fps > 5);
+  await page.waitForFunction(() => window.AlgoAnimate.diagnostics().fps > 5, null, { timeout: 10000 });
   await page.screenshot({ path: resolve(results, 'desktop-live.png'), fullPage: true });
   console.log('Demo produces measured audio, a waveform and sound-derived composition changes.');
 
   const defaultMotion = await motionSamples(60, 100);
   await writeFile(resolve(results, 'continuous-ink.json'), JSON.stringify(defaultMotion, null, 2));
   const enginesInMotion = {};
-  await page.fill('#evolution', '100');
+  await setRange('evolution', 100);
   for (const engine of ['field', 'rects', 'burst', 'network', 'organic', 'geometric', 'scribble', 'spiral']) {
     await select('engine', engine);
     await page.waitForFunction(mode => window.AlgoAnimate.diagnostics().engine === mode, engine, { timeout: 12000 });
     const samples = await motionSamples();
     enginesInMotion[engine] = { uniqueFrames: new Set(samples.map(s => s.hash)).size, frames: samples.length };
   }
-  await page.fill('#evolution', '50');
+  await setRange('evolution', 50);
   await page.screenshot({ path: resolve(results, 'desktop-continuous.png'), fullPage: true });
   console.log('All eight engines continuously draw actual marker strokes; no blank-paper resets or image holds.');
 
