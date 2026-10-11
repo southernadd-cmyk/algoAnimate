@@ -104,6 +104,25 @@ export function strokeSchedule(paths, penCount = 3) {
   return schedule.map(entry => ({ ...entry, start: entry.start / total, duration: entry.duration / total }));
 }
 
+export function pathBounds(d) {
+  const numbers = d.match(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi)?.map(Number) || [0, 0];
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (let i = 0; i + 1 < numbers.length; i += 2) {
+    minX = Math.min(minX, numbers[i]); maxX = Math.max(maxX, numbers[i]);
+    minY = Math.min(minY, numbers[i + 1]); maxY = Math.max(maxY, numbers[i + 1]);
+  }
+  return { x: (minX + maxX) / 2, y: (minY + maxY) / 2, extent: Math.hypot(maxX - minX, maxY - minY) };
+}
+
+// Curve subdivision and pen scheduling are performed inside the composition
+// worker. Geometry tables can cross the worker boundary; Path2D objects cannot.
+export function prepareSceneGeometry(scene) {
+  const paths = scene.paths.map(entry => ({
+    ...entry, geometry: markerGeometry(entry.d), ...pathBounds(entry.d)
+  }));
+  return { ...scene, paths, schedule: strokeSchedule(paths), geometryPrepared: true };
+}
+
 export function inkWindow(age, timing, memory = 0.7) {
   return {
     from: clamp((age - timing.start - memory) / timing.duration),

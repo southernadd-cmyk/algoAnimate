@@ -1,5 +1,6 @@
 import { clamp } from './features.js';
-import { markerGeometry, strokeSchedule, strokeWindow, inkWindow } from './ink.js';
+import { prepareSceneGeometry, strokeWindow, inkWindow } from './ink.js';
+export { pathBounds } from './ink.js';
 
 export const DEFAULT_SETTINGS = Object.freeze({
   seed: 'SOUND-READY', mode: 'spiral', orientation: 'landscape',
@@ -59,16 +60,6 @@ export class SceneBuilder {
   }
 }
 
-export function pathBounds(d) {
-  const numbers = d.match(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi)?.map(Number) || [0, 0];
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (let i = 0; i + 1 < numbers.length; i += 2) {
-    minX = Math.min(minX, numbers[i]); maxX = Math.max(maxX, numbers[i]);
-    minY = Math.min(minY, numbers[i + 1]); maxY = Math.max(maxY, numbers[i + 1]);
-  }
-  return { x: (minX + maxX) / 2, y: (minY + maxY) / 2, extent: Math.hypot(maxX - minX, maxY - minY) };
-}
-
 export class AnimatedArtwork {
   constructor(canvas) {
     this.canvas = canvas;
@@ -106,10 +97,11 @@ export class AnimatedArtwork {
   setScene(scene, immediate = false, startNow = false) {
     const changedSize = this.canvas.width !== scene.width || this.canvas.height !== scene.height;
     if (changedSize) { this.canvas.width = scene.width; this.canvas.height = scene.height; }
-    const paths = scene.paths.map(entry => ({
-      ...entry, path: new Path2D(entry.d), geometry: markerGeometry(entry.d), ...pathBounds(entry.d)
-    }));
-    this.current = { ...scene, paths, schedule: strokeSchedule(paths) };
+    // Only Path2D construction runs on the UI thread when the worker is used.
+    // The synchronous path remains for browsers without worker support.
+    const prepared = scene.geometryPrepared ? scene : prepareSceneGeometry(scene);
+    const paths = prepared.paths.map(entry => ({ ...entry, path: new Path2D(entry.d) }));
+    this.current = { ...prepared, paths };
     this.queuedSeconds = 0;
     if (immediate || changedSize || !this.layers.length) {
       this.layers = []; this.queued = null;
