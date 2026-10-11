@@ -269,10 +269,42 @@ try {
   await page.click('#stopRecording'); await page.waitForFunction(() => !window.AlgoAnimate.diagnostics().recordingBusy);
   const pausedPath = resolve(results, 'tab-pause-resume.webm');
   checkTake(await download(pausedPath), 1400, 1000);
-  const pausedVideo = spawnSync('ffmpeg', ['-hide_banner', '-i', pausedPath, '-an', '-vf', 'freezedetect=n=-100dB:d=0.3', '-f', 'null', '-'], { encoding: 'utf8' });
+  // VP9 can refine a complex still by a few colour levels across interframes.
+  // Exact canvas equality is checked above. Allow tiny codec noise here, then
+  // verify decoded pixels during the audio silence and visible motion on either side.
+  const pausedVideo = spawnSync('ffmpeg', ['-hide_banner', '-i', pausedPath, '-an', '-vf', 'freezedetect=n=-70dB:d=0.3', '-f', 'null', '-'], { encoding: 'utf8' });
   assert.equal(pausedVideo.status, 0); assert.ok(pausedVideo.stderr.includes('freeze_start'), 'The recorded artwork holds during actual source silence');
   const pausedAudio = spawnSync('ffmpeg', ['-hide_banner', '-i', pausedPath, '-vn', '-af', 'silencedetect=noise=-60dB:d=0.3', '-f', 'null', '-'], { encoding: 'utf8' });
   assert.equal(pausedAudio.status, 0); assert.ok(pausedAudio.stderr.includes('silence_start'), 'The export preserves the corresponding silent audio');
+  const silentStart = +pausedAudio.stderr.match(/silence_start:\s*([\d.]+)/)[1];
+  const silentEnd = +pausedAudio.stderr.match(/silence_end:\s*([\d.]+)/)[1];
+  const pauseFrames = execFileSync('ffmpeg', ['-v', 'error', '-i', pausedPath, '-an', '-vf', 'fps=30,scale=350:250',
+    '-pix_fmt', 'rgb24', '-f', 'rawvideo', '-'], { maxBuffer: 64 * 1024 * 1024 });
+  assert.ok(pauseFrames.length / frameBytes > Math.ceil((silentEnd + 0.4) * 30), 'Decoded video covers silence and resumption');
+  const heldFrom = Math.ceil((silentStart + 0.2) * 30), heldTo = Math.floor((silentEnd - 0.12) * 30);
+  assert.ok(heldTo - heldFrom >= 8, 'The take contains a usable decoded silent plateau');
+  let maximumSilentChangedPixels = 0;
+  for (let frame = heldFrom; frame < heldTo; frame++) {
+    let changed = 0;
+    for (let pixel = 0; pixel < frameBytes; pixel += 3) {
+      const a = frame * frameBytes + pixel, b = (frame + 1) * frameBytes + pixel;
+      if (Math.abs(pauseFrames[a] - pauseFrames[b]) > 8 || Math.abs(pauseFrames[a + 1] - pauseFrames[b + 1]) > 8
+        || Math.abs(pauseFrames[a + 2] - pauseFrames[b + 2]) > 8) changed++;
+    }
+    maximumSilentChangedPixels = Math.max(maximumSilentChangedPixels, changed);
+  }
+  assert.ok(maximumSilentChangedPixels <= 15, 'Decoded ink holds throughout the audio silence, within codec noise');
+  function changedBetween(from, to) {
+    let changed = 0;
+    for (let pixel = 0; pixel < frameBytes; pixel += 3) {
+      const a = from * frameBytes + pixel, b = to * frameBytes + pixel;
+      if (Math.abs(pauseFrames[a] - pauseFrames[b]) > 8 || Math.abs(pauseFrames[a + 1] - pauseFrames[b + 1]) > 8
+        || Math.abs(pauseFrames[a + 2] - pauseFrames[b + 2]) > 8) changed++;
+    }
+    return changed;
+  }
+  assert.ok(changedBetween(3, 12) > 100, 'The exported pens move before the silent interval');
+  assert.ok(changedBetween(Math.ceil((silentEnd + 0.1) * 30), Math.ceil((silentEnd + 0.4) * 30)) > 100, 'The exported pens resume after audio silence');
   console.log('Recording preserves silent audio with held ink, then resumes drawing with the sound.');
 
   await select('orientation', 'portrait');
@@ -342,7 +374,7 @@ try {
   const summary = { version: '0.04', desktop: 'passed', engines: 8, pens: 24, minimumMeasuredFPS: measuredFPS,
     realAudioBandIsolation: 'passed', demoAnalysis: 'passed',
     continuousMarkerDrawing: enginesInMotion, noVideoHolds: 'passed', minimumChangedPixelsPer400ms: minimumChangedPixels,
-    tabSilenceStopMs, recordingSilenceStopMs, exactSilentFrameHold: 'passed', capturedPauseResumeExport: 'passed',
+    tabSilenceStopMs, recordingSilenceStopMs, maximumSilentChangedPixels, exactSilentFrameHold: 'passed', capturedPauseResumeExport: 'passed',
     videoAudioExport: 'passed', portraitWaveform: 'passed', permissionRecovery: 'passed',
     fileReplayAndAutoFinish: 'passed', mobileWidths: [360, 390], errors, state: await state(),
     landscapeExport: first.streams.map(({ codec_name, codec_type, width, height }) => ({ codec_name, codec_type, width, height })) };

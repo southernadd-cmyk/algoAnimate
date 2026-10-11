@@ -79,6 +79,7 @@ export class LayeredArtwork {
   }
   resetSound() {
     for (const voice of this.voices) {
+      voice.generation++; voice.building = false; voice.art.discardQueued();
       voice.sound.reset(); voice.firstSoundSeed = true; voice.lastSceneTime = -1;
       voice.requestedSeed = voice.art.drawnSeed || 'SOUND-READY';
     }

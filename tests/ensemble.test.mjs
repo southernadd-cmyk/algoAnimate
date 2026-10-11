@@ -71,6 +71,21 @@ function fixture() {
 }
 const full = sound(Object.fromEntries(keys.map(key => [key, 0.4])));
 
+test('switching sound sources invalidates old worker targets without clearing painted ink', () => {
+  const { art } = fixture();
+  art.updateSignals(full, 0.2, true); art.draw(0.2, 0.6, false, 4);
+  const progress = art.voices.map(voice => voice.art.stats.progress);
+  for (const voice of art.voices) {
+    voice.building = true;
+    voice.art.setScene({ ...voice.art.current, seed: 'obsolete-source' });
+  }
+  const generations = art.voices.map(voice => voice.generation);
+  art.resetSound();
+  assert.deepEqual(art.voices.map(voice => voice.generation), generations.map(value => value + 1));
+  assert.ok(art.voices.every(voice => !voice.building && voice.firstSoundSeed && !voice.art.queued && voice.sound.seed === 'SOUND-READY'));
+  assert.deepEqual(art.voices.map(voice => voice.art.stats.progress), progress);
+});
+
 test('all eight engines draw on one paper with 24 independent pen lanes and bounded history', () => {
   const { art, commands } = fixture();
   for (let i = 0; i < 150; i++) {
