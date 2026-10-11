@@ -9,6 +9,24 @@ export function meterLevel(rms) {
   return clamp((20 * Math.log10(rms) - METER_FLOOR_DB) / (METER_CEILING_DB - METER_FLOOR_DB));
 }
 
+// Spectral flux is already a measured 0..1 ratio of rising spectral energy
+// to total spectrum. Show the largest *actual* observation since the last UI
+// update, without amplifying it or holding an artistically smoothed tail.
+// The 100ms UI refresh would otherwise skip very short percussive transients.
+export class SpectralChangeMeter {
+  constructor() { this.reset(); }
+  reset() { this.peak = 0; this.value = 0; }
+  sample(rawFlux, active, available = true) {
+    if (!active || !available) { this.reset(); return; }
+    if (Number.isFinite(rawFlux)) this.peak = Math.max(this.peak, clamp(rawFlux));
+  }
+  take() {
+    this.value = this.peak;
+    this.peak = 0;
+    return this.value;
+  }
+}
+
 // Meter ballistics are independent of the artist's sensitivity/smoothing knobs.
 // A fixed dB scale never normalises an empty band up to a convincing-looking bar.
 export class BandMeters {
