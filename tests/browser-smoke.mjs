@@ -676,6 +676,7 @@ try {
       await mobilePage.waitForFunction(() => window.AlgoAnimate.diagnostics().source === 'demo'
         && window.AlgoAnimate.diagnostics().drawing.inkLength > 20, null, { timeout: 12000 });
       const button = mobilePage.locator('#clearCanvas');
+      await button.scrollIntoViewIfNeeded();
       assert.ok(await button.evaluate(el => {
         const b = el.getBoundingClientRect(), x = b.left + b.width / 2, y = b.top + b.height / 2;
         return b.height >= 44 && b.width >= 90 && (document.elementFromPoint(x, y) === el
