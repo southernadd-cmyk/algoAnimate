@@ -181,7 +181,10 @@ test('changing treble leaves the bass clock unchanged and native portrait transf
   assert.equal(advance(0), advance(1));
   const { art, commands } = fixture();
   art.voices[3].art.current.paths[0].transform = 'matrix(0 1 -1 0 1000 0)';
-  art.updateSignals(full, 0.1, true); art.draw(0.1, 0.6, false, 4);
+  // The transformed engine enters after its deliberate first-ink stagger.
+  for (let frame = 0; frame < 8; frame++) {
+    art.updateSignals(full, 0.1, true); art.draw(0.1, 0.6, false, 4);
+  }
   assert.ok(commands.some(command => JSON.stringify(command) === JSON.stringify(['transform', 0, 1, -1, 0, 1000, 0])));
   assert.equal(commands.filter(command => command[0] === 'save').length, commands.filter(command => command[0] === 'restore').length);
 });
