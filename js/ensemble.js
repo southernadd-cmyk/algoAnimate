@@ -78,10 +78,21 @@ export class LayeredArtwork {
     this.entrySeconds = 0;
     this.entryFinished = false;
     this.entryNextSlot = 0;
+    this.solo = null;
     this.voices = ENGINE_ROUTES.map(route => ({ route, art: new AnimatedArtwork(canvas),
+      muted: false,
       sound: new RoutedSound(route), flowing: false, building: false, generation: 0,
       pendingStyle: null, requestedSeed: 'SOUND-READY', firstSoundSeed: true,
       entrySlot: null, lastSceneTime: -1 }));
+  }
+  enabled(voice) { return !voice.muted && (!this.solo || this.solo === voice.route.id); }
+  toggleSolo(id) {
+    this.solo = this.solo === id ? null : id;
+    if (this.solo) this.voices.find(voice => voice.route.id === id).muted = false;
+  }
+  toggleMute(id) {
+    const voice = this.voices.find(voice => voice.route.id === id);
+    if (voice) voice.muted = !voice.muted;
   }
   get current() { return this.voices[0].art.current; }
   get ready() { return this.voices.every(voice => voice.art.current); }
@@ -94,7 +105,7 @@ export class LayeredArtwork {
       : 'MIX-' + hash(seeds.join('|')).toString(16).padStart(8, '0').toUpperCase();
   }
   get stats() {
-    return this.voices.reduce((sum, voice) => {
+    return this.voices.filter(voice => this.enabled(voice)).reduce((sum, voice) => {
       const art = voice.art;
       for (const key of ['progress', 'penTips', 'visiblePaths', 'inkLength']) sum[key] += art.stats[key];
       sum.layers += art.layers.length; sum.cycles += art.turns;
@@ -136,7 +147,7 @@ export class LayeredArtwork {
   updateSignals(features, dt, available) {
     const stopped = [];
     for (const voice of this.voices) {
-      voice.flowing = voice.sound.update(features, dt, available);
+      voice.flowing = voice.sound.update(features, dt, available && this.enabled(voice));
       if (voice.art.flowing && !voice.flowing) stopped.push(voice);
     }
     return stopped;
@@ -157,6 +168,7 @@ export class LayeredArtwork {
     const entering = !this.entryFinished;
     if (entering && this.voices.some(voice => voice.flowing)) this.entrySeconds += dt;
     for (const voice of this.voices) {
+      if (!this.enabled(voice)) { voice.art.flowing = false; continue; }
       if (entering && voice.flowing && voice.entrySlot === null) voice.entrySlot = this.entryNextSlot++;
       const elapsed = this.entrySeconds - (voice.entrySlot || 0) * ENTRY_STAGGER_SECONDS;
       const canDraw = voice.flowing && (!entering || elapsed > 0);
@@ -169,8 +181,9 @@ export class LayeredArtwork {
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
   }
   diagnostics() {
-    return this.voices.map(({ route, art, sound, flowing, building }) => ({
+    return this.voices.map(voice => { const { route, art, sound, flowing, building } = voice; return ({
       engine: route.id, inputs: route.inputs, seed: art.drawnSeed,
+      enabled: this.enabled(voice), muted: voice.muted, solo: this.solo === route.id,
       measuredSeed: sound.seed, queuedSeed: art.queued?.seed || null,
       seedWindow: { samples: sound.seeds.history.length, steady: sound.seeds.history.length === 16
         && sound.seeds.history.every(value => value === sound.seeds.history[0]) },
@@ -182,6 +195,6 @@ export class LayeredArtwork {
       style: art.drawnStyle || null,
       ink: [...new Set((art.activeLayer?.scene || art.current)?.paths.map(path => path.stroke) || [])],
       strokeSample: (art.activeLayer?.scene || art.current)?.paths.slice(0, 3).map(({ width, lineCap, blend, dash }) => ({ width, lineCap, blend, dash })) || []
-    }));
+    }); });
   }
 }

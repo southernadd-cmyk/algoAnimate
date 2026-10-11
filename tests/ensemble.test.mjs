@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { ENGINE_ROUTES, RoutedSound, LayeredArtwork,
   ENTRY_STAGGER_SECONDS, ENTRY_DURATION_SECONDS, ENTRY_FIRST_STROKE_AGE } from '../js/ensemble.js';
 import { SILENCE } from '../js/features.js';
+import { captureSheet, sheetSVG } from '../js/export.js';
+import { ScoreCapture, ScoreReplay, parseScore } from '../js/scores.js';
 
 const keys = ['level', 'bass', 'mid', 'treble', 'centroid', 'flux'];
 const sound = values => {
@@ -191,4 +193,44 @@ test('changing treble leaves the bass clock unchanged and native portrait transf
   }
   assert.ok(commands.some(command => JSON.stringify(command) === JSON.stringify(['transform', 0, 1, -1, 0, 1000, 0])));
   assert.equal(commands.filter(command => command[0] === 'save').length, commands.filter(command => command[0] === 'restore').length);
+});
+
+
+test('solo/mute isolates visible ink, holds excluded clocks and resumes them without clearing', () => {
+  const { art } = fixture();
+  for (let i = 0; i < 20; i++) { art.updateSignals(full, 0.03, true); art.draw(0.03, 0.6, false, 4); }
+  const held = art.voices.slice(1).map(voice => voice.art.activeLayer.age);
+  art.toggleSolo('field');
+  for (let i = 0; i < 10; i++) { art.updateSignals(full, 0.03, true); art.draw(0.03, 0.6, false, 4); }
+  assert.deepEqual(art.voices.slice(1).map(voice => voice.art.activeLayer.age), held);
+  assert.deepEqual(art.diagnostics().filter(voice => voice.enabled).map(voice => voice.engine), ['field']);
+  art.toggleMute('field'); art.updateSignals(full, 0.03, true); art.draw(0.03, 0.6, false, 4);
+  assert.equal(captureSheet(art).paths.length, 0);
+  art.toggleSolo('field'); art.updateSignals(full, 0.03, true); art.draw(0.03, 0.6, false, 4);
+  assert.equal(art.voices[0].muted, true);
+  assert.ok(art.voices[1].art.activeLayer.age > held[0]);
+});
+
+test('scores reproduce every visible vector frame, including future pressure, mixing, clear and density changes', () => {
+  const { art } = fixture(), capture = new ScoreCapture(0), expected = [];
+  let time = 0;
+  for (let frame = 0; frame < 90; frame++) {
+    if (frame === 16) art.toggleSolo('field');
+    if (frame === 25) art.toggleSolo('field');
+    if (frame === 32) art.clearInk();
+    if (frame === 45) art.voices.forEach(voice => { voice.art.current.inkMemory = 0.2; });
+    const dt = frame % 2 ? 0.027 : 0.063; time += dt * 1000;
+    art.updateSignals(full, dt, true); art.draw(dt, 0.8, false, 1);
+    capture.capture(time, art, full, false); expected.push(sheetSVG(captureSheet(art)));
+  }
+  const text = JSON.stringify(capture.finish()), parsed = parseScore(text), replay = new ScoreReplay(parsed);
+  assert.ok(text.length < 100000, 'Feature/clock frames reference shared vector geometry');
+  assert.ok(!JSON.stringify(parsed).includes('segments'), 'Derived geometry is not written into saved scores');
+  parsed.frames.forEach((frame, index) => { replay.seek(frame[0]); assert.equal(sheetSVG(replay.sheet()), expected[index], 'Frame ' + index); });
+  replay.seek(0); replay.advance(100); assert.equal(replay.paused, true);
+  replay.seek(0); replay.paused = true; replay.advance(1); assert.equal(replay.time, 0);
+  const malicious = JSON.parse(text); malicious.scenes[0].paths[0].stroke = 'url(https://example.com)';
+  assert.throws(() => parseScore(JSON.stringify(malicious)));
+  const badRef = JSON.parse(text); badRef.frames[0][2] = 9999;
+  assert.throws(() => parseScore(JSON.stringify(badRef)));
 });
