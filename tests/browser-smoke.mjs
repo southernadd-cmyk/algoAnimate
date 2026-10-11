@@ -461,6 +461,13 @@ try {
   await page.waitForFunction(() => !window.AlgoAnimate.diagnostics().clearHold
     && window.AlgoAnimate.diagnostics().drawing.inkLength > 0, null, { timeout: 8000 });
   assert.equal((await state()).drawing.blank, false, 'Sound resumes new ink without reconnecting');
+  // The new clean-sheet entrance deliberately starts with one pen, then
+  // introduces the other voices. Continuous-ink assertions apply after that
+  // introduction, not to the intentionally sparse opening frames.
+  await page.waitForFunction(() => {
+    const state = window.AlgoAnimate.diagnostics();
+    return state.introduction.finished && state.engines.every(engine => engine.inkLength > 0);
+  }, null, { timeout: 8000 });
   console.log(`Captured audio pauses/resumes the actual ink; silence stopped drawing in ${Math.round(tabSilenceStopMs)} ms.`);
 
   const defaultMotion = await motionSamples(60, 100);
