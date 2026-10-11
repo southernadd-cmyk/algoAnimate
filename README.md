@@ -55,6 +55,12 @@ its actual container. The canvas shape is preserved (1400 × 1000 landscape or
 | Automatic Marks | Bass + onsets |
 | Golden Trajectories | Mids + treble |
 
+- The **Onsets / change** meter uses the unamplified maximum of actual
+  positive spectral-flux observations between UI refreshes (~100 ms). It is a
+  relative upward spectrum-change ratio, not a volume level or an estimated
+  probability of a beat. This meter, and the onsets part of **Bass + onsets**,
+  are independent of the artistic smoothing/sensitivity controls; there is
+  no 3× display boost or slow artificial release.
 - The bass, mid and treble meters sum squared FFT magnitudes across their
   frequency ranges and compensate for Web Audio's Blackman window to estimate
   band RMS. All three use the same fixed −60 to 0 dBFS display scale, with a fast
@@ -71,6 +77,9 @@ its actual container. The canvas shape is preserved (1400 × 1000 landscape or
 - AlgoArt V7 generates genuine φ compositions and marker paths. New compositions
   and their marker arc-length geometry are prepared in the worker where supported,
   leaving the animation thread to construct only the browser's Path2D objects.
+  The initial active pen now draws a tiny real marker arc in the first audible
+  frame. Other engines enter over about 260 ms, avoiding both sudden fully drawn
+  lines and the previous blank 1.1-second restart delay.
   On the first clean-sheet sound entrance, eight engines enter 90 ms apart and
   their pen speed eases up over 450 ms, without altering the sound-derived seeds.
   First sound-seeded replacements wait for the clean-sheet introduction to finish

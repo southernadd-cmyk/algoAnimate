@@ -1,0 +1,33 @@
+name: Integration regression checks
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'js/**'
+      - 'tests/**'
+      - '.github/workflows/integration-check.yml'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Static checks and unit tests
+        run: npm run check && npm test
+      - name: Install Playwright
+        run: npm install --no-save --package-lock=false playwright@1.64.0
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Ensure audio and video inspection tools
+        run: command -v ffprobe || (sudo apt-get update && sudo apt-get install -y ffmpeg)
+      - name: Browser, mobile, meter, sound and recording checks
+        run: npm run test:browser
+      - name: Retain test files
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integrated-fixes-tests
+          path: test-results/
+          if-no-files-found: ignore

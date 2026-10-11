@@ -121,7 +121,8 @@ export class AnimatedArtwork {
     this.layers.push(this.layer(scene, age));
     this.layers = this.layers.slice(-3); this.turns++;
   }
-  draw(features, dt, response = 0.6, gentle = false, cycle = 4, flowing = features.active, { paper = true, opacity = 1 } = {}) {
+  draw(features, dt, response = 0.6, gentle = false, cycle = 4, flowing = features.active,
+    { paper = true, opacity = 1, initialInkAge = 0 } = {}) {
     if (!this.current) return;
     this.flowing = flowing;
     const memory = (this.current.inkMemory ?? 0.7) * (gentle ? 8 / 7 : 1);
@@ -132,11 +133,16 @@ export class AnimatedArtwork {
         this.layers = [this.layer(this.current)];
         this.turns++;
       } else if (!this.layers.length) {
-        // Clear the ready-state drawing along its strokes while the first
-        // live drawing begins, rather than making it disappear in one frame.
-        this.layers = [this.layer(this.current, 0, true), this.layer(this.current)];
+        // The clean-sheet entrance has no fully-formed preview to flash in.
+        this.layers = initialInkAge > 0
+          ? [this.layer(this.current)]
+          : [this.layer(this.current, 0, true), this.layer(this.current)];
         this.turns++;
       }
+      // Start with a tiny section of genuine pen geometry: visible immediately,
+      // but nowhere near a fully drawn line. Once begun, the original arc-length
+      // stroke timeline advances normally on subsequent frames.
+      if (initialInkAge > 0 && this.activeLayer?.age === 0) this.activeLayer.age = initialInkAge;
       const targetSpeed = 1 + response * (features.level * 0.55 + features.mid * 0.2 + features.flux * 0.35);
       this.speed += (targetSpeed - this.speed) * (1 - Math.exp(-dt / 0.2));
       const advance = dt * this.speed / Math.max(0.5, this.cycleDuration(cycle) * (gentle ? 1.6 : 1));
