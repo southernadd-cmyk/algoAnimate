@@ -1,4 +1,4 @@
-# ALGO / ANIMATE — v0.05
+# ALGO / ANIMATE — v0.06
 
 **Sound, in living ink.** A browser-only audio experiment using the golden ratio
 and ALGO / ART's expressive marker renderer.
@@ -53,6 +53,14 @@ its actual container. The canvas shape is preserved (1400 × 1000 landscape or
 | Automatic Marks | Bass + onsets |
 | Golden Trajectories | Mids + treble |
 
+- The bass, mid and treble meters sum squared FFT magnitudes across their
+  frequency ranges and compensate for Web Audio's Blackman window to estimate
+  band RMS. All three use the same fixed −60 to 0 dBFS display scale, with a fast
+  attack and short release. Wider bands are not divided by their bin count.
+  Numeric readings show real incoming levels, independent of the artist's
+  sensitivity and smoothing controls. Pausing or disconnecting resets the meters;
+  an empty band stays empty. The six tuned animation features keep their existing
+  mapping, preserving the pen pace and seed behaviour.
 - Each engine hashes a short, ordered, quantised history of only its assigned
   measurements into its own seed. Unassigned measurements cannot influence
   that engine's seed, pen pace or stroke pressure. There is no timestamp or
@@ -104,7 +112,7 @@ pixels. The public palette hook is adapted in `js/ink-palette.js`, in both the
 worker and fallback renderer; no vendor source is modified.
 
 Live capture timing, noise, sample rates and browser FFT behaviour can differ,
-so v0.05 does not promise bit-identical videos across devices or mathematical
+so v0.06 does not promise bit-identical videos across devices or mathematical
 uniqueness for every possible sound. Frame rate targets 30 FPS and
 depends on the device, engine and number of marks. This is a prototype.
 
@@ -139,7 +147,8 @@ GitHub Actions also runs a Chromium smoke test covering all eight composition
 engines drawing simultaneously, 24 pen lanes, distinct native pen profiles and
 colour families, random style handoffs under changing and steady audio, held
 styles in silence, card-to-renderer agreement, keyboard controls, touch targets,
-real bass-only/mid-only route
+calibrated bass/mid/treble levels, amplitude response and silent meters,
+real bass-only/mid-only/treble-only route
 isolation, measured frame rate, continuous marker drawing between seed changes, captured-audio silence
 and resume, exact frozen artwork pixels, silent intervals in exported video,
 live demo analysis,

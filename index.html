@@ -17,7 +17,7 @@
   <a class="skip-link" href="#sources">Skip to audio controls</a>
   <header class="masthead">
     <a class="brand" href="./" aria-label="AlgoAnimate home"><span class="phi">φ</span><span>ALGO<span class="slash">/</span>ANIMATE</span></a>
-    <div class="masthead-note"><span class="edition">v0.05 · LIVE DRAWING STUDIO</span><a href="https://southernadd-cmyk.github.io/algoart/" target="_blank" rel="noopener">From ALGO / ART ↗</a></div>
+    <div class="masthead-note"><span class="edition">v0.06 · LIVE DRAWING STUDIO</span><a href="https://southernadd-cmyk.github.io/algoart/" target="_blank" rel="noopener">From ALGO / ART ↗</a></div>
   </header>
   <main>
     <div class="intro"><div><p class="eyebrow">AN EXPERIMENT IN SOUND &amp; INK</p><h1>Sound, in living ink.</h1></div><p class="intro-note">One sound. Eight voices. 24 pens. <br>Every drawing finds a new colour.</p></div>
@@ -34,7 +34,8 @@
         <section class="signal-panel" aria-label="Audio waveform">
           <div class="signal-heading"><h2>Listening, live.</h2><span id="signalInfo">CONNECT A SOURCE TO BEGIN</span></div>
           <canvas id="waveform" width="1120" height="128" aria-label="Waveform of the incoming sound"></canvas>
-          <div class="band-meters"><div><span>BASS</span><meter id="bassMeter" min="0" max="1" value="0" aria-label="Bass energy"></meter></div><div><span>MIDS</span><meter id="midMeter" min="0" max="1" value="0" aria-label="Midrange energy"></meter></div><div><span>TREBLE</span><meter id="trebleMeter" min="0" max="1" value="0" aria-label="Treble energy"></meter></div><span class="beat" id="beat">● <span>ONSET</span></span></div>
+          <div class="band-meters"><div><span>BASS</span><output id="bassDb">—</output><meter id="bassMeter" min="0" max="1" value="0" aria-label="Bass level on a −60 to 0 dBFS scale"></meter></div><div><span>MIDS</span><output id="midDb">—</output><meter id="midMeter" min="0" max="1" value="0" aria-label="Midrange level on a −60 to 0 dBFS scale"></meter></div><div><span>TREBLE</span><output id="trebleDb">—</output><meter id="trebleMeter" min="0" max="1" value="0" aria-label="Treble level on a −60 to 0 dBFS scale"></meter></div><span class="beat" id="beat">● <span>ONSET</span></span></div>
+          <p class="meter-scale">Band levels · −60 to 0 dBFS</p>
         </section>
         <section class="engine-panel" aria-label="Eight engine layers and their audio inputs">
           <div class="engine-heading"><div><p class="eyebrow">THE ENSEMBLE</p><h2>Eight voices. One sheet.</h2></div><span id="activeLayers">0 / 8 DRAWING</span></div>
@@ -75,7 +76,7 @@
       </aside>
     </div>
   </main>
-  <footer><span>ALGO / ANIMATE <span class="footer-dot">·</span> v0.05</span><span>Sound stays in your browser. No account. No uploads.</span><a href="https://github.com/southernadd-cmyk/algoAnimate" target="_blank" rel="noopener">Source on GitHub ↗</a></footer>
+  <footer><span>ALGO / ANIMATE <span class="footer-dot">·</span> v0.06</span><span>Sound stays in your browser. No account. No uploads.</span><a href="https://github.com/southernadd-cmyk/algoAnimate" target="_blank" rel="noopener">Source on GitHub ↗</a></footer>
   <dialog id="previewDialog"><div class="dialog-heading"><h2>Your recorded take</h2><button type="button" id="closePreview" aria-label="Close recording preview">✕</button></div><video id="recordingPreview" controls playsinline></video></dialog>
   <script src="./vendor/algoart/phi.js"></script>
   <script src="./vendor/algoart/random.js"></script>

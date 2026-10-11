@@ -11,6 +11,11 @@ export function hash(text) {
 // A short release joins tiny gaps between audio blocks and percussion hits.
 export const SOUND_FLOOR = 0.0015;
 export const SOUND_RELEASE_SECONDS = 0.09;
+// AnalyserNode uses a 1/N FFT of a periodic Blackman window. Summing the
+// one-sided squared magnitudes and undoing its mean-square attenuation gives
+// estimated band RMS. Unlike a per-bin average, this does not dilute wider bands.
+// Web Audio §1.8.6: https://www.w3.org/TR/webaudio-1.0/#fft-windowing-and-smoothing-over-time
+const BLACKMAN_MEAN_SQUARE = 0.42 ** 2 + (0.5 ** 2 + 0.08 ** 2) / 2;
 export class SoundGate {
   constructor(release = SOUND_RELEASE_SECONDS) { this.release = release; this.reset(); }
   reset() { this.remaining = 0; this.open = false; }
@@ -50,6 +55,8 @@ export function measureAudio(wave, decibels, sampleRate, fftSize, previous) {
   const rms = Math.sqrt(squareSum / Math.max(1, wave.length));
   return {
     rms, peak, level: clamp(rms * 4),
+    bandRms: Object.fromEntries(['bass', 'mid', 'treble'].map((key, index) =>
+      [key, Math.sqrt(2 * sums[index] / BLACKMAN_MEAN_SQUARE)])),
     bass: clamp(Math.sqrt(sums[0] / Math.max(1, counts[0])) * 8),
     mid: clamp(Math.sqrt(sums[1] / Math.max(1, counts[1])) * 12),
     treble: clamp(Math.sqrt(sums[2] / Math.max(1, counts[2])) * 22),
@@ -83,7 +90,7 @@ export class FeatureTracker {
       const tau = raw[key] > this.smoothed[key] ? 0.025 + smoothing * 0.09 : 0.08 + smoothing * 0.7;
       this.smoothed[key] += (raw[key] - this.smoothed[key]) * (1 - Math.exp(-dt / tau));
     }
-    return { ...this.smoothed, raw, active, beat, rms: measured.rms, peak: measured.peak };
+    return { ...this.smoothed, raw, active, beat, rms: measured.rms, peak: measured.peak, bandRms: measured.bandRms };
   }
 }
 
@@ -111,5 +118,6 @@ export function evolutionInterval(value) { return 7 - clamp(value / 100) * 6; }
 export const SILENCE = Object.freeze({
   level: 0, bass: 0, mid: 0, treble: 0, centroid: 0, flux: 0,
   active: false, beat: false, rms: 0, peak: 0,
+  bandRms: Object.freeze({ bass: 0, mid: 0, treble: 0 }),
   raw: { level: 0, bass: 0, mid: 0, treble: 0, centroid: 0, flux: 0 }
 });

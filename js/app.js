@@ -4,6 +4,7 @@ import { SceneBuilder, DEFAULT_SETTINGS } from './scenes.js';
 import { LayeredArtwork, ensembleSettings } from './ensemble.js';
 import { VideoRecorder, MAX_TAKE_SECONDS } from './recording.js';
 import { StyleDeck, styleSettings } from './styles.js';
+import { BandMeters, BAND_KEYS } from './meters.js';
 
 const $ = id => document.getElementById(id);
 const art = $('art'), waveform = $('waveform'), player = $('filePlayer');
@@ -13,6 +14,7 @@ const recordingContext = recordingCanvas.getContext('2d', { alpha: false });
 const artwork = new LayeredArtwork(art), builder = new SceneBuilder();
 const styleDeck = new StyleDeck();
 const tracker = new FeatureTracker();
+const bandMeters = new BandMeters();
 const soundGate = new SoundGate();
 let features = SILENCE, pending = false, fileURL = null, fileLabel = '', sourceLabel = '';
 let layoutGeneration = 0, preparing = false;
@@ -89,7 +91,7 @@ function syncControls() {
 }
 
 function resetSound() {
-  tracker.reset(); soundGate.reset(); artwork.resetSound(); features = SILENCE;
+  tracker.reset(); bandMeters.reset(); soundGate.reset(); artwork.resetSound(); features = SILENCE;
   waveHistory.length = 0;
 }
 
@@ -109,7 +111,7 @@ async function connect(action, label) {
 async function disconnect(ended = false) {
   if (pending) return;
   if (recorder.busy) await recorder.stop();
-  audio.stop(); tracker.reset(); soundGate.reset(); features = SILENCE;
+  audio.stop(); tracker.reset(); bandMeters.reset(); soundGate.reset(); features = SILENCE;
   message(ended ? 'The audio source ended. Your last drawing is held on the paper.' : 'Audio disconnected. Your last drawing is held on the paper.');
   syncControls();
 }
@@ -306,7 +308,13 @@ function updateUI(now) {
   $('liveLabel').classList.toggle('recording', recorder.active);
   const decibels = features.rms > 1e-7 ? Math.max(-99, Math.round(20 * Math.log10(features.rms))) + ' dBFS' : 'SILENCE';
   $('signalInfo').textContent = active ? decibels + ' / ' + (audio.context.sampleRate / 1000).toFixed(1) + ' kHz' : 'CONNECT A SOURCE TO BEGIN';
-  $('bassMeter').value = features.bass; $('midMeter').value = features.mid; $('trebleMeter').value = features.treble;
+  for (const key of BAND_KEYS) {
+    const band = bandMeters.bands[key];
+    const text = band.db === null || band.db < -60 ? '—' : Math.round(band.db) + ' dB';
+    $(key + 'Meter').value = band.level;
+    $(key + 'Meter').setAttribute('aria-valuetext', text === '—' ? 'Silent or below −60 dBFS' : text + 'FS');
+    $(key + 'Db').textContent = text;
+  }
   $('beat').classList.toggle('lit', now < onsetUntil);
   $('fps').textContent = String(fps || '—');
   $('seed').textContent = artwork.drawnSeed || DEFAULT_SETTINGS.seed;
@@ -350,6 +358,7 @@ function frame(now) {
     +$('sensitivity').value / 100, +$('smoothing').value / 100) : SILENCE;
   if (features.beat) onsetUntil = now + 150;
   const available = Boolean(audio.kind) && !(audio.kind === 'file' && player.paused);
+  bandMeters.update(features.bandRms, dt, features.active, available && Boolean(data));
   const flowing = soundGate.update(features.active, dt, available && Boolean(data));
   for (const voice of artwork.updateSignals(features, dt, flowing && available && Boolean(data))) {
     // Cancel only this route's obsolete work; the other engines keep drawing.
@@ -380,13 +389,14 @@ window.addEventListener('pagehide', () => { if (recorder.active) recorder.stop()
 
 // Small read-only diagnostics surface for smoke tests and bug reports.
 window.AlgoAnimate = Object.freeze({
-  version: '0.05',
+  version: '0.06',
   diagnostics: () => ({
     source: audio.kind, seed: artwork.drawnSeed, engine: 'ensemble',
     engines: artwork.diagnostics(), compositions: artwork.sceneCount,
     paths: artwork.pathCount, worker: Boolean(builder.worker), building: isBuilding(),
     dimensions: [art.width, art.height], features: { level: features.level, bass: features.bass,
       mid: features.mid, treble: features.treble, rms: features.rms, active: features.active },
+    bandMeters: { scale: [-60, 0], ...bandMeters.bands },
     recording: recorder.active, recordingBusy: recorder.busy,
     recordedBytes: recorder.result?.blob.size || 0, recordingType: recorder.result?.type || recorder.mimeType,
     drawing: { ...artwork.stats, pens: 24,

@@ -78,6 +78,25 @@ async function setCapturedBands(values, pulse = false) {
     }
   }, { values, pulse });
 }
+async function checkBandMeter(key, amplitude = 0.2) {
+  await setCapturedBands({ [key]: amplitude }); await page.waitForTimeout(700);
+  const sample = await page.evaluate(() => ({ state: window.AlgoAnimate.diagnostics(),
+    ui: Object.fromEntries(['bass', 'mid', 'treble'].map(key => [key, {
+      value: document.getElementById(key + 'Meter').value,
+      label: document.getElementById(key + 'Db').textContent,
+      height: document.getElementById(key + 'Meter').getBoundingClientRect().height }])) }));
+  const band = sample.state.bandMeters[key], ui = sample.ui[key];
+  const expectedDb = 20 * Math.log10(amplitude * 0.8 / Math.sqrt(2));
+  assert.ok(Math.abs(band.db - expectedDb) < 0.6, key + ' real band RMS matches the known incoming tone');
+  assert.ok(Math.abs(20 * Math.log10(band.rms / sample.state.features.rms)) < 0.6, key + ' band energy agrees with time-domain RMS');
+  assert.ok(Math.abs(ui.value - (expectedDb + 60) / 60) < 0.025, key + ' meter shows the measured decibel level');
+  assert.ok(Math.abs(parseFloat(ui.label) - band.db) <= 1, key + ' has a real numeric level reading');
+  assert.ok(ui.height >= 8, 'The meter is visibly sized');
+  for (const other of ['bass', 'mid', 'treble'].filter(band => band !== key)) {
+    assert.ok(sample.ui[other].value < 0.1, key + ' tone does not light the ' + other + ' meter');
+  }
+  return { rms: band.rms, db: band.db, fill: ui.value };
+}
 async function silenceCapturedTab() {
   await page.evaluate(() => {
     window.silenceStarted = performance.now();
@@ -97,6 +116,8 @@ async function silenceCapturedTab() {
   assert.equal((await state()).source, 'tab', 'Silence does not disconnect capture');
   assert.ok(await page.evaluate(() => JSON.stringify(window.AlgoAnimate.diagnostics().engines.map(engine => engine.style)) === window.frozenKits), 'Silence holds the current pens and palettes');
   assert.equal((await state()).drawing.queuedSeed, null, 'Silence drops obsolete future targets');
+  await page.waitForTimeout(150);
+  assert.ok(await page.evaluate(() => ['bass', 'mid', 'treble'].every(key => document.getElementById(key + 'Meter').value === 0)), 'Silence empties every band meter');
   return delay;
 }
 async function resumeCapturedTab() {
@@ -211,6 +232,13 @@ try {
   await page.waitForFunction(() => window.AlgoAnimate.diagnostics().fps > 5, null, { timeout: 10000 });
   await page.screenshot({ path: resolve(results, 'desktop-live.png'), fullPage: true });
   console.log('Demo produces measured audio, a waveform and sound-derived composition changes.');
+  const demoBandPeaks = { bass: 0, mid: 0, treble: 0 };
+  for (let frame = 0; frame < 20; frame++) {
+    await page.waitForTimeout(80);
+    const meters = (await state()).bandMeters;
+    for (const key of Object.keys(demoBandPeaks)) demoBandPeaks[key] = Math.max(demoBandPeaks[key], meters[key].level);
+  }
+  assert.ok(Object.values(demoBandPeaks).every(value => value > 0.1), 'The demo visibly reaches all three real frequency meters');
 
   await connectControlledTab();
   await page.waitForTimeout(400);
@@ -229,6 +257,24 @@ try {
   assert.equal(midEnd.find(engine => engine.engine === 'field').progress, midStart.find(engine => engine.engine === 'field').progress, 'Mids do not move the bass engine');
   assert.equal(midEnd.find(engine => engine.engine === 'burst').progress, midStart.find(engine => engine.engine === 'burst').progress, 'Mids do not move the treble engine');
   console.log('Real bass-only and mid-only audio independently move their assigned engine layers.');
+  const calibratedMeters = {};
+  for (const key of ['bass', 'mid', 'treble']) calibratedMeters[key] = await checkBandMeter(key);
+  const fills = Object.values(calibratedMeters).map(meter => meter.fill);
+  assert.ok(Math.max(...fills) - Math.min(...fills) < 0.025, 'Equal-level tones use equal meter scales regardless of band width');
+  const trebleStart = (await state()).engines; await page.waitForTimeout(300);
+  const trebleEnd = (await state()).engines;
+  assert.notEqual(trebleEnd.find(engine => engine.engine === 'burst').progress, trebleStart.find(engine => engine.engine === 'burst').progress, 'Treble drives the treble engine');
+  for (const id of ['field', 'rects']) assert.equal(trebleEnd.find(engine => engine.engine === id).progress,
+    trebleStart.find(engine => engine.engine === id).progress, 'Treble holds ' + id);
+  const quietTreble = await checkBandMeter('treble', 0.02);
+  assert.ok(Math.abs(calibratedMeters.treble.db - quietTreble.db - 20) < 0.6, 'Ten times lower amplitude reads 20 dB lower');
+  assert.ok(calibratedMeters.treble.fill - quietTreble.fill > 0.3, 'A quieter input visibly reduces the meter');
+  await setRange('sensitivity', 300); await setRange('smoothing', 100);
+  await page.waitForTimeout(300);
+  assert.ok(Math.abs((await state()).bandMeters.treble.db - quietTreble.db) < 0.6, 'Artistic controls do not amplify the measurement');
+  await setRange('sensitivity', 100); await setRange('smoothing', 55);
+  await setCapturedBands({ mid: 0.2 }); await page.waitForTimeout(350);
+  console.log('Real bass/mid/treble tones are calibrated equally; meters respond to actual amplitude and treble reaches its drawing engine.');
   await setRange('evolution', 100); await page.waitForTimeout(2400);
   const steadyKits = [];
   for (let frame = 0; frame < 16; frame++) {
@@ -436,10 +482,12 @@ try {
   await page.waitForFunction(() => window.AlgoAnimate.diagnostics().drawing.inkLength > 0);
   assert.equal((await state()).drawing.flowing, false, 'Changing paper preserves the held drawing without restarting audio');
   await page.setViewportSize({ width: 360, height: 800 });
+  await page.waitForTimeout(200); await page.evaluate(() => scrollTo(0, 0));
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'Narrow mobile has no horizontal overflow');
   await page.screenshot({ path: resolve(results, 'mobile-landscape.png'), fullPage: true });
   assert.deepEqual(errors, [], 'No uncaught application errors');
-  const summary = { version: '0.05', desktop: 'passed', engines: 8, pens: 24, minimumMeasuredFPS: measuredFPS,
+  const summary = { version: '0.06', desktop: 'passed', engines: 8, pens: 24, minimumMeasuredFPS: measuredFPS,
+    calibratedMeters, quietTreble, demoBandPeaks, meterSilenceAndSensitivity: 'passed',
     distinctNativePensAndPalettes: 'passed', styleChanges, steadyToneFreshKits: 'passed', keyboardControls: 'passed',
     realAudioBandIsolation: 'passed', demoAnalysis: 'passed',
     continuousMarkerDrawing: enginesInMotion, noVideoHolds: 'passed', minimumChangedPixelsPer400ms: minimumChangedPixels,
