@@ -58,6 +58,17 @@ test('golden lanes interleave on the whole sheet and renderer hooks restore afte
   const restore = interlockRenderer(A, settings('field', 0.5));
   assert.notEqual(A.goldenCanvasPoint, original); restore(); assert.equal(A.goldenCanvasPoint, original);
 });
+test('nearby continuous controls and different ink do not rehash the native layout dice', () => {
+  const received = [], A = { makeR(seed) { received.push(seed); } }, original = A.makeR;
+  for (const value of [0.2, 0.201, 0.9]) {
+    const s = settings('field', value), restore = interlockRenderer(A, s);
+    A.makeR(s.seed + '|' + JSON.stringify(s) + '|layout|fixture|ORBIT');
+    A.makeR(s.seed + '|field-shape-v3|ORBIT|0'); restore();
+  }
+  assert.equal(new Set(received.filter((seed, i) => i % 2 === 0)).size, 1);
+  assert.equal(new Set(received.filter((seed, i) => i % 2 === 1)).size, 1);
+  assert.equal(A.makeR, original);
+});
 test('centroid cap is labelled as a lower bound', () => {
   assert.equal(centroidReading(1), '≥ 10,000 Hz centroid');
   assert.equal(centroidReading(0.42), '4,200 Hz centroid');

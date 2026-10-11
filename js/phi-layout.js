@@ -16,6 +16,17 @@ export function interlockRenderer(A, settings) {
   const { lane, lanes } = settings.interlock;
   const originals = new Map();
   const replace = (name, method) => { if (A[name]) { originals.set(name, A[name]); A[name] = method; } };
+  const makeR = A.makeR;
+  replace('makeR', function (seed) {
+    // Native AlgoArt includes the entire settings JSON in two RNG keys. Keep
+    // the sound seed, route and purpose suffix, but don't hash smooth controls
+    // or ink kits again: nearby control values should steer the same dice.
+    if (typeof seed === 'string' && seed.startsWith(settings.seed + '|{')) {
+      const end = seed.lastIndexOf('}');
+      seed = settings.seed + '|' + settings.mode + '|composition' + seed.slice(end + 1);
+    }
+    return makeR.call(this, seed);
+  });
   const point = (i, count) => goldenLanePoint(A.W, A.H, i, count, lane, lanes);
   let focal = 0;
   const phiPoint = A.phiPoint;

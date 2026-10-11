@@ -159,6 +159,9 @@ and ink retention. A route uses only its assigned inputs. Density still limits
 the whole ensemble. Settings latch at drawing boundaries; existing strokes keep
 their geometry and pressure. Similar sound steers similar controls, while hashed
 seeds still provide variation; this is not semantic recognition of instruments.
+The animation adapter keeps continuous controls and ink choices out of the
+native renderer's additional settings hash, so they steer the same random
+sequence instead of scrambling it again with every small parameter change.
 
 The engines share interleaved candidate anchors in one golden-angle sequence:
 voice 0 takes slots 0, 8, 16; voice 1 takes 1, 9, 17, and so on. Focal and
