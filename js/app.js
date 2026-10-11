@@ -11,6 +11,7 @@ import { captureSheet, paintSheet, sheetSVG } from './export.js';
 import { ScoreCapture, ScoreReplay, parseScore, MAX_SCORE_BYTES } from './scores.js';
 import { ScreenAwake, shortcut } from './performance.js';
 import { ListeningOverlay } from './listening.js';
+import { pngWithDpi } from './png.js';
 
 const $ = id => document.getElementById(id);
 const art = $('art'), waveform = $('waveform'), player = $('filePlayer'), demoPlayer = $('demoPlayer');
@@ -34,7 +35,7 @@ let scoreCapture = null, scoreData = null, replay = null, scoreTakeStarted = nul
 const waveHistory = [];
 const listening = new ListeningOverlay($('listeningOverlay'), artwork.voices.map(voice => voice.route));
 const awake = new ScreenAwake(status => {
-  const text = { awake: 'Screen kept awake', off: 'Screen wake lock off', released: 'Screen wake lock released', unavailable: 'Screen wake lock unavailable' }[status];
+  const text = { awake: 'Screen kept awake', off: 'Screen wake lock off', released: 'Screen wake lock released', unavailable: 'Screen wake lock unavailable', failed: 'Couldn’t keep screen awake' }[status];
   $('wakeStatus').textContent = text;
   $('performanceStatus').textContent = (recorder.active ? '● Recording · ' : '') + text;
 });
@@ -350,7 +351,7 @@ player.addEventListener('error', () => {
 });
 
 function settings(voice, seed, style) {
-  return ensembleSettings(voice.route, seed, $('orientation').value, 'marker', +$('density').value, style);
+  return ensembleSettings(voice.route, seed, $('orientation').value, 'marker', +$('density').value, style, voice.sound.profile);
 }
 async function generateAll(immediate = false) {
   const request = ++layoutGeneration; preparing = true;
@@ -361,7 +362,7 @@ async function generateAll(immediate = false) {
   try {
     const scenes = await Promise.all(artwork.voices.map(voice => {
       const style = voice.art.drawnStyle ? styleDeck.withMood(voice.art.drawnStyle, $('palette').value)
-        : styleDeck.next(artwork.voices, $('palette').value);
+        : styleDeck.next(artwork.voices, $('palette').value, voice.sound.seed, voice.route.id, voice.sound.profile);
       if (!style) throw new Error('No ink kit available.');
       voice.pendingStyle = style;
       return builder.build(settings(voice, voice.art.drawnSeed || DEFAULT_SETTINGS.seed, style));
@@ -381,7 +382,7 @@ async function generateAll(immediate = false) {
   }
 }
 async function generateVoice(voice, seed) {
-  const style = styleDeck.next(artwork.voices, $('palette').value);
+  const style = styleDeck.next(artwork.voices, $('palette').value, seed, voice.route.id, voice.sound.profile);
   if (!style) return;
   const request = ++voice.generation, layout = layoutGeneration;
   voice.requestedSeed = seed; voice.building = true; voice.pendingStyle = style;
@@ -502,9 +503,12 @@ $('snapshot').addEventListener('click', () => {
       canvas.width = sheet.width * 3; canvas.height = sheet.height * 3;
       paintSheet(canvas.getContext('2d', { alpha: false }), sheet, 3);
     }
-    canvas.toBlob(blob => {
-      if (blob) downloadBlob(blob, `algoanimate-${fileStamp()}${format === 'print' ? '-3x' : ''}.png`);
-      else message('The frame could not be exported.', true);
+    canvas.toBlob(async blob => {
+      try {
+        if (!blob) throw new Error('PNG encoding failed');
+        downloadBlob(format === 'print' ? await pngWithDpi(blob) : blob,
+          `algoanimate-${fileStamp()}${format === 'print' ? '-3x-300dpi' : ''}.png`);
+      } catch { message('The frame could not be exported.', true); }
       // Release the large print surface as soon as PNG encoding finishes.
       if (format === 'print') { canvas.width = 1; canvas.height = 1; }
     }, 'image/png');
@@ -650,7 +654,7 @@ window.addEventListener('pagehide', () => { if (recorder.active) recorder.stop()
 
 // Small read-only diagnostics surface for smoke tests and bug reports.
 window.AlgoAnimate = Object.freeze({
-  version: '0.13',
+  version: '0.14',
   diagnostics: () => ({
     source: audio.kind, paused: drawingPaused, performance: performanceMode, wakeLock: awake.status,
     replay: replay ? { frame: replay.index, time: replay.time, paused: replay.paused, duration: replay.score.duration } : null,

@@ -16,7 +16,11 @@ self.onmessage = async ({ data: { id, settings } }) => {
     A.rendererVersion = 7;
     A.svgRecorder = { precise: true, paths: [], paperMarks: [] };
     renderComposition(A, canvas, settings);
-    const scene = { ...A.svgRecorder, seed: settings.seed, mode: settings.mode, style: settings.style, inkMemory: settings.inkMemory, markHierarchy: settings.markHierarchy, phraseScale: settings.phraseScale, width: A.W, height: A.H, paper: settings.paper };
+    const scene = { ...A.svgRecorder, seed: settings.seed, mode: settings.mode, style: settings.style,
+      composition: { audio: settings.audioControls, interlock: settings.interlock, elements: settings.elements,
+        curveBias: settings.curveBias, shapeAmount: settings.shapeAmount, rotation: settings.rotation,
+        elementScale: settings.elementScale, nesting: settings.nesting, inkMemory: settings.inkMemory },
+      inkMemory: settings.inkMemory, markHierarchy: settings.markHierarchy, phraseScale: settings.phraseScale, width: A.W, height: A.H, paper: settings.paper };
     A.svgRecorder = null;
     self.postMessage({ id, scene: prepareSceneGeometry(scene) });
   } catch (error) {

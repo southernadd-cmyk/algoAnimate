@@ -23,7 +23,7 @@ export class ScreenAwake {
         if (this.lock !== lock) return;
         this.lock = null; this.status = this.wanted ? 'released' : 'off'; this.onChange(this.status);
       });
-    } catch { this.status = 'unavailable'; }
+    } catch { this.status = this.wanted ? 'failed' : 'off'; }
     finally { this.pending = false; this.onChange(this.status); }
   }
   dispose() { this.setWanted(false); this.document?.removeEventListener('visibilitychange', this.visibility); }

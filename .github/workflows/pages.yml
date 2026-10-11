@@ -9,9 +9,8 @@ permissions:
   id-token: write
 jobs:
   test:
-    # Explicit releases can reuse passed checks when application code is unchanged.
-    if: github.event_name != 'workflow_dispatch' && !startsWith(github.event.head_commit.message, '[deploy-verified]')
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -27,16 +26,17 @@ jobs:
         run: command -v ffprobe || (sudo apt-get update && sudo apt-get install -y ffmpeg)
       - name: Browser, audio and recording smoke test
         run: npm run test:browser
+      - name: Demo, mixing, performance, print and score replay
+        run: npm run test:demo
       - name: Keep screenshots and test take
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: v0.13-smoke-test
+          name: v0.14-smoke-test
           path: test-results/
           if-no-files-found: ignore
   deploy:
     needs: test
-    if: ${{ !cancelled() && (needs.test.result == 'success' || github.event_name == 'workflow_dispatch' || startsWith(github.event.head_commit.message, '[deploy-verified]')) }}
     concurrency:
       group: pages-deploy
       cancel-in-progress: false

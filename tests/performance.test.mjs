@@ -23,8 +23,14 @@ test('wake lock releases after use, reacquires on visibility and releases a late
 });
 test('wake lock denial is reported without disrupting the drawing', async () => {
   const document = new EventTarget(); document.visibilityState = 'visible';
-  const awake = new ScreenAwake(() => {}, { wakeLock: { request: async () => { throw new Error('Denied'); } } }, document);
-  awake.setWanted(true); await Promise.resolve(); assert.equal(awake.status, 'unavailable'); awake.dispose();
+  const navigator = { wakeLock: { request: async () => { throw new Error('Denied'); } } };
+  const awake = new ScreenAwake(() => {}, navigator, document);
+  awake.setWanted(true); await Promise.resolve(); assert.equal(awake.status, 'failed');
+  navigator.wakeLock.request = async () => new Sentinel();
+  document.dispatchEvent(new Event('visibilitychange')); await Promise.resolve();
+  assert.equal(awake.status, 'awake', 'A temporary rejection can recover without a toggle');
+  awake.dispose();
+  assert.equal(new ScreenAwake(() => {}, {}, document).status, 'unavailable');
 });
 test('shortcuts respect typing, focused controls, modifier keys and repeated presses', () => {
   assert.equal(shortcut({ key: 'R' }), 'record');

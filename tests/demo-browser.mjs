@@ -176,6 +176,8 @@ try {
   const printDownload = page.waitForEvent('download'); await page.click('#snapshot');
   const printPath = resolve(results, 'frame-3x.png'); await (await printDownload).saveAs(printPath);
   const png = await readFile(printPath); assert.equal(png.readUInt32BE(16), 4200); assert.equal(png.readUInt32BE(20), 3000);
+  const phys = png.indexOf('pHYs'); assert.ok(phys > 0);
+  assert.equal(png.readUInt32BE(phys + 4), 11811); assert.equal(png.readUInt32BE(phys + 8), 11811); assert.equal(png[phys + 12], 1);
   await page.click('#leaveReplay'); await page.setInputFiles('#scoreInput', scorePath);
   await page.waitForFunction(() => window.AlgoAnimate.diagnostics().replay !== null);
   await page.locator('#scoreSeek').evaluate(el => { el.value = el.max; el.dispatchEvent(new Event('input', { bubbles: true })); });

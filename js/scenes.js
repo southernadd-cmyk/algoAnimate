@@ -47,7 +47,11 @@ export class SceneBuilder {
     A.svgRecorder = { precise: true, paths: [], paperMarks: [] };
     try {
       renderComposition(A, canvas, settings);
-      return prepareSceneGeometry({ ...A.svgRecorder, seed: settings.seed, mode: settings.mode, style: settings.style, inkMemory: settings.inkMemory, markHierarchy: settings.markHierarchy, phraseScale: settings.phraseScale, width: A.W, height: A.H, paper: settings.paper });
+      return prepareSceneGeometry({ ...A.svgRecorder, seed: settings.seed, mode: settings.mode, style: settings.style,
+        composition: { audio: settings.audioControls, interlock: settings.interlock, elements: settings.elements,
+          curveBias: settings.curveBias, shapeAmount: settings.shapeAmount, rotation: settings.rotation,
+          elementScale: settings.elementScale, nesting: settings.nesting, inkMemory: settings.inkMemory },
+        inkMemory: settings.inkMemory, markHierarchy: settings.markHierarchy, phraseScale: settings.phraseScale, width: A.W, height: A.H, paper: settings.paper });
     } finally { A.svgRecorder = null; }
   }
   build(settings) {

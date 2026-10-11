@@ -24,7 +24,7 @@ export class RoutedSound {
     this.gate = new SoundGate(route.inputs.includes('flux') ? 0.24 : 0.09);
     this.reset();
   }
-  reset() { this.seeds.reset(); this.gate.reset(); this.features = SILENCE; this.seed = 'SOUND-READY'; }
+  reset() { this.seeds.reset(); this.gate.reset(); this.features = SILENCE; this.seed = 'SOUND-READY'; this.profile = null; }
   update(features, dt, available) {
     const inputs = this.route.inputs;
     const raw = Object.fromEntries(inputs.map(key => [key, features.raw[key]]));
@@ -42,19 +42,41 @@ export class RoutedSound {
       treble: inputs.includes('treble') ? features.treble : 0,
       centroid: inputs.includes('centroid') ? features.centroid : 0,
       flux: inputs.includes('flux') ? features.flux : 0 };
+    // A continuous phrase envelope, independent of the quantised variety seed.
+    // Hold it through silence; only this route's assigned inputs enter it.
+    if (available && features.active) {
+      const blend = this.profile ? 1 - Math.exp(-dt / 0.75) : 1;
+      const prior = this.profile || this.features;
+      this.profile = Object.fromEntries(['level', 'bass', 'mid', 'treble', 'centroid', 'flux']
+        .map(key => [key, prior[key] + (this.features[key] - prior[key]) * blend]));
+    }
     return flowing;
   }
 }
 
-export function ensembleSettings(route, seed, orientation, palette, density = 25, style = null) {
+export function ensembleSettings(route, seed, orientation, palette, density = 25, style = null, profile = null) {
   const amount = clamp(density / 100);
+  const owns = key => route.inputs.includes(key);
+  const energy = profile ? clamp(profile.level) : 0.5;
+  const bass = owns('bass') ? clamp(profile?.bass || 0) : 0;
+  const onsets = owns('flux') ? clamp(profile?.flux || 0) : 0;
+  const brightness = owns('centroid') ? clamp(profile?.centroid || 0)
+    : owns('treble') ? clamp(profile?.treble || 0) : null;
+  const audioControls = profile ? { energy, bass, onsets, brightness } : null;
   return { ...DEFAULT_SETTINGS, seed, mode: route.id, orientation, palette,
     // The budget is for eight overlapping engines. Sparse drawings need fewer
     // subjects and less internal detail, rather than eight sparse solo posters.
-    elements: Math.round(3 + 25 * amount ** 1.5), density: 4 + 96 * amount,
-    complexity: 12 + 34 * amount, recursion: Math.round(1 + 2 * amount),
-    negativeSpace: 92 - 48 * amount, nesting: 6 + 42 * amount,
-    overlap: 8 + 47 * amount, inkMemory: 0.12 + 0.58 * amount,
+    elements: Math.round(3 + 25 * amount ** 1.5 * (0.55 + 0.9 * energy)), density: 4 + 96 * amount,
+    complexity: 12 + 34 * amount + 18 * onsets, recursion: Math.round(1 + 2 * amount),
+    negativeSpace: 92 - 48 * amount * (0.6 + 0.8 * energy), nesting: 6 + 42 * amount + 34 * bass,
+    overlap: 8 + 47 * amount, inkMemory: (0.12 + 0.58 * amount) * (0.55 + 0.9 * energy),
+    curveBias: brightness === null || !profile ? 80 : 92 - 84 * brightness,
+    shapeAmount: profile && owns('flux') ? 24 + 72 * onsets : DEFAULT_SETTINGS.shapeAmount,
+    rotation: profile && owns('flux') ? 24 + 72 * onsets : DEFAULT_SETTINGS.rotation,
+    elementScale: profile && owns('bass') ? 0.72 + 0.72 * bass : 1,
+    // Eight disjoint lanes of one golden-angle sequence, on the whole paper.
+    interlock: { lane: ENGINE_ROUTES.findIndex(item => item.id === route.id), lanes: ENGINE_ROUTES.length },
+    audioControls,
     // Supporting frames get a bounded mark budget. Expressive voices unfold
     // in longer phrases; each still reads only its own assigned sound inputs.
     markHierarchy: true, rectangleBudget: Math.round(2 + 4 * amount),
@@ -193,6 +215,7 @@ export class LayeredArtwork {
       visiblePaths: art.stats.visiblePaths, inkLength: art.stats.inkLength,
       layers: art.layers.length, cycles: art.turns, pens: 3,
       style: art.drawnStyle || null,
+      composition: (art.activeLayer?.scene || art.current)?.composition || null,
       ink: [...new Set((art.activeLayer?.scene || art.current)?.paths.map(path => path.stroke) || [])],
       strokeSample: (art.activeLayer?.scene || art.current)?.paths.slice(0, 3).map(({ width, lineCap, blend, dash }) => ({ width, lineCap, blend, dash })) || []
     }); });

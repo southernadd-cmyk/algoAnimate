@@ -1,5 +1,6 @@
 import { SOUND_FLOOR } from './features.js';
 const db = value => value > 1e-7 ? (20 * Math.log10(value)).toFixed(1) + ' dBFS' : 'silence';
+export const centroidReading = value => (value >= 1 ? '≥ 10,000' : Math.round(value * 10000).toLocaleString('en-GB')) + ' Hz centroid';
 export class ListeningOverlay {
   constructor(element, routes) {
     this.element = element;
@@ -20,7 +21,7 @@ export class ListeningOverlay {
       mid: 'Mids 250–2,200 Hz · ' + db(features.bandRms.mid),
       treble: 'Treble 2,200–14,000 Hz · ' + db(features.bandRms.treble),
       level: 'Loudness (RMS) · ' + db(features.rms),
-      centroid: 'Brightness · ' + Math.round(features.raw.centroid * 10000) + ' Hz centroid',
+      centroid: 'Brightness · ' + centroidReading(features.raw.centroid),
       flux: 'Onsets / change · ' + (features.raw.flux * 100).toFixed(1) + '% positive flux'
     };
     this.summary.textContent = (replay ? 'Recorded features' : 'Live measurements') + ' · RMS gate '

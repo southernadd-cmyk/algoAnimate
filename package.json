@@ -1,11 +1,11 @@
 {
   "name": "algoanimate",
-  "version": "0.0.13",
+  "version": "0.0.14",
   "private": true,
   "type": "module",
   "description": "Sound-driven golden-ratio compositions, live in the browser.",
   "scripts": {
-    "test": "node --test tests/features.test.mjs tests/audio.test.mjs tests/demo.test.mjs tests/webm.test.mjs tests/ink.test.mjs tests/ensemble.test.mjs tests/styles.test.mjs tests/meters.test.mjs tests/composition.test.mjs tests/performance.test.mjs",
+    "test": "node --test tests/features.test.mjs tests/audio.test.mjs tests/demo.test.mjs tests/webm.test.mjs tests/ink.test.mjs tests/ensemble.test.mjs tests/styles.test.mjs tests/meters.test.mjs tests/composition.test.mjs tests/performance.test.mjs tests/sound-composition.test.mjs",
     "test:browser": "node tests/browser-smoke.mjs",
     "test:demo": "node tests/demo-browser.mjs",
     "test:clock": "node tests/recording-clock-browser.mjs",

@@ -1,5 +1,5 @@
-// A separate source of randomness for the ink kit. Audio alone still determines
-// each engine's composition seed, timing and pressure.
+// Sound chooses the kit; reservations keep simultaneous voices distinguishable.
+import { hash, clamp } from './features.js';
 export const PEN_PROFILES = Object.freeze([
   ['fineliner', 'Fineliner', 'fine', 3.3, 15, 22, 4, 86, 2],
   ['felt', 'Felt marker', 'felt', 3.4, 29, 34, 15, 78, 2],
@@ -25,9 +25,6 @@ export const INK_FAMILIES = Object.freeze([
   'Jade', 'Sea glass', 'Petrol', 'Blueprint', 'Iris', 'Violet', 'Berry', 'Rose'
 ].map((name, index) => Object.freeze({ id: name.toLowerCase().replace(' ', '-'), name, hue: index * 22.5 })));
 
-function randomSeed() {
-  return globalThis.crypto?.getRandomValues(new Uint32Array(1))[0] ?? Math.floor(Math.random() * 4294967296);
-}
 function colorsFor(family, mood, variation) {
   const [saturation, lightness] = mood === 'soft' ? [49, 49] : mood === 'bold' ? [88, 39] : [74, 43];
   return [-7, 0, 7].map((offset, index) => {
@@ -37,14 +34,14 @@ function colorsFor(family, mood, variation) {
 }
 
 export class StyleDeck {
-  constructor(seed = randomSeed()) { this.state = seed >>> 0; this.serial = 0; }
+  constructor(seed = hash('algoanimate-ink')) { this.state = seed >>> 0; this.serial = 0; }
   random() {
     let value = this.state += 0x6D2B79F5;
     value = Math.imul(value ^ value >>> 15, value | 1);
     value ^= value + Math.imul(value ^ value >>> 7, value | 61);
     return ((value ^ value >>> 14) >>> 0) / 4294967296;
   }
-  next(voices, mood = 'mix') {
+  next(voices, mood = 'mix', soundSeed = null, route = '', profile = null) {
     const usedPens = new Set(), usedPalettes = new Set();
     for (const voice of voices) {
       for (const style of [voice.art.activeLayer?.scene.style || voice.art.current?.style,
@@ -55,12 +52,16 @@ export class StyleDeck {
     const pens = PEN_PROFILES.filter(pen => !usedPens.has(pen.id));
     const palettes = INK_FAMILIES.filter(palette => !usedPalettes.has(palette.id));
     if (!pens.length || !palettes.length) return null;
-    const pen = pens[Math.floor(this.random() * pens.length)];
-    const palette = palettes[Math.floor(this.random() * palettes.length)];
-    const variation = (this.random() - 0.5) * 4;
+    const random = soundSeed === null ? () => this.random()
+      : (() => { const source = new StyleDeck(hash(soundSeed + '|' + route + '|ink')); return () => source.random(); })();
+    const pen = pens[Math.floor(random() * pens.length)];
+    const palette = palettes[Math.floor(random() * palettes.length)];
+    const variation = (random() - 0.5) * 4;
+    const energy = profile ? clamp(profile.level) : 0.5, onsets = clamp(profile?.flux || 0);
     return { token: `INK-${++this.serial}`, pen: { ...pen,
-      thickness: +(pen.thickness * (0.94 + this.random() * 0.12)).toFixed(2),
-      wobble: +(pen.wobble * (0.94 + this.random() * 0.12)).toFixed(2) },
+      thickness: +(pen.thickness * (0.7 + energy * 0.6) * (0.94 + random() * 0.12)).toFixed(2),
+      wobble: +(pen.wobble * (0.94 + random() * 0.12)).toFixed(2),
+      dryness: clamp(pen.dryness + 30 * onsets, 0, 100) },
       palette, variation, mood, colors: colorsFor(palette, mood, variation) };
   }
   withMood(style, mood) {
