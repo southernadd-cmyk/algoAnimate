@@ -295,13 +295,13 @@ $('snapshot').addEventListener('click', () => {
 });
 $('clearCanvas').addEventListener('click', () => {
   artwork.clearInk();
-  // Live audio would otherwise redraw ink on the very next animation frame,
-  // so the user never sees the cleared sheet (especially on touch screens).
-  clearHoldUntil = performance.now() + 1100;
+  // The paper clears immediately, then the next live audio frame starts new
+  // strokes. A 1.1s hold previously made every restart feel unresponsive.
+  clearHoldUntil = performance.now() + 24;
   artwork.draw(0, +$('motion').value / 100, $('gentle').checked, evolutionInterval(+$('evolution').value));
   $('clearCanvas').textContent = 'Canvas cleared ✓';
   message(audio.kind
-    ? 'Canvas cleared. The paper will stay empty briefly, then the sound starts fresh ink.'
+    ? 'Canvas cleared. Fresh ink will respond immediately to the sound.'
     : 'Canvas cleared. Connect audio to draw again.');
 });
 $('fullscreen').addEventListener('click', async () => {

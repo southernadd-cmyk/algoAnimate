@@ -387,7 +387,11 @@ try {
   assert.ok(trace.length > 6, 'Sound startup produces multiple rendered frames');
   const firstInk = trace.find(frame => frame.ink > 0);
   assert.ok(firstInk && firstInk.voices <= 2, 'First sound reveals a few strokes, not eight fully formed drawings');
-  assert.ok(trace.some(frame => frame.voices >= 3), 'Other first strokes enter progressively');
+  const firstActive = trace.find(frame => frame.elapsed > 0);
+  assert.ok(firstActive && firstInk.time - firstActive.time < 100,
+    'The first visible ink must follow the first audible frame within 100 ms');
+  assert.ok(trace.some(frame => frame.elapsed > 0.26 && frame.voices >= 3),
+    'Other first strokes enter within a fraction of a second');
   await page.waitForFunction(() => window.AlgoAnimate.diagnostics().fps > 5, null, { timeout: 10000 });
   await page.screenshot({ path: resolve(results, 'desktop-live.png'), fullPage: true });
   console.log('Demo produces measured audio, a waveform and sound-derived composition changes.');
@@ -459,7 +463,7 @@ try {
   assert.equal(clearState.drawing.blank, true, 'Ink stays cleared during captured silence');
   assert.equal(clearState.drawing.layers, 0, 'All drawing layers are removed');
   assert.equal(clearState.drawing.inkLength, 0, 'No old strokes return after a frame');
-  assert.equal(clearState.clearHold, true, 'Canvas stays clear long enough to be seen on a touch screen');
+  assert.equal(clearState.clearHold, false, 'Clear Canvas does not impose a blank one-second hold');
   await resumeCapturedTab();
   await page.waitForFunction(() => !window.AlgoAnimate.diagnostics().clearHold
     && window.AlgoAnimate.diagnostics().drawing.inkLength > 0, null, { timeout: 8000 });
@@ -711,20 +715,25 @@ try {
         return b.height >= 44 && b.width >= 90 && (document.elementFromPoint(x, y) === el
           || el.contains(document.elementFromPoint(x, y)));
       }), width + 'px clear target is a fully tappable button');
+      // Observe the cleared frame synchronously inside the tap handler: the
+      // next audio frame should already be drawing, not held empty for 1.1s.
+      await mobilePage.evaluate(() => {
+        document.getElementById('clearCanvas').addEventListener('click', () => {
+          const s = window.AlgoAnimate.diagnostics();
+          window.touchCleared = s.drawing.blank && s.drawing.layers === 0 && s.drawing.inkLength === 0;
+          window.touchClearStarted = performance.now();
+        }, { once: true });
+      });
       await button.tap();
-      await mobilePage.waitForFunction(() => window.AlgoAnimate.diagnostics().drawing.blank
-        && window.AlgoAnimate.diagnostics().drawing.layers === 0, null, { timeout: 3000 });
-      await mobilePage.waitForTimeout(250);
-      const blankState = await mobilePage.evaluate(() => ({
-        diagnostics: window.AlgoAnimate.diagnostics(), clearLabel: document.getElementById('clearCanvas').textContent,
-        canvas: document.getElementById('art').toDataURL()
-      }));
-      assert.equal(blankState.diagnostics.source, 'demo', 'Tapping Clear retains mobile demo audio');
-      assert.equal(blankState.diagnostics.drawing.inkLength, 0, 'Tapping Clear gives genuinely empty paper');
-      assert.equal(blankState.diagnostics.clearHold, true, 'Clean paper is held visually on mobile');
-      assert.ok(blankState.clearLabel.includes('cleared'), 'Touch gives visible acknowledgement');
+      assert.equal(await mobilePage.evaluate(() => window.touchCleared), true,
+        'Tapping Clear immediately empties the actual canvas');
       await mobilePage.waitForFunction(() => !window.AlgoAnimate.diagnostics().clearHold
         && window.AlgoAnimate.diagnostics().drawing.inkLength > 0, null, { timeout: 10000 });
+      const resumed = await mobilePage.evaluate(() => ({
+        delay: performance.now() - window.touchClearStarted, source: window.AlgoAnimate.diagnostics().source
+      }));
+      assert.equal(resumed.source, 'demo', 'Tapping Clear retains mobile demo audio');
+      assert.ok(resumed.delay < 650, width + 'px mobile canvas starts fresh strokes promptly');
       await mobilePage.screenshot({ path: resolve(results, 'mobile-touch-' + width + '.png'), fullPage: true });
     }
   } finally {

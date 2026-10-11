@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ENGINE_ROUTES, RoutedSound, LayeredArtwork,
-  ENTRY_STAGGER_SECONDS, ENTRY_DURATION_SECONDS } from '../js/ensemble.js';
+  ENTRY_STAGGER_SECONDS, ENTRY_DURATION_SECONDS, ENTRY_FIRST_STROKE_AGE } from '../js/ensemble.js';
 import { SILENCE } from '../js/features.js';
 
 const keys = ['level', 'bass', 'mid', 'treble', 'centroid', 'flux'];
@@ -75,8 +75,11 @@ const full = sound(Object.fromEntries(keys.map(key => [key, 0.4])));
 test('first clean-sheet sound staggers ink and eases pen speeds without restarting existing strokes', () => {
   const { art } = fixture();
   art.updateSignals(full, 1 / 30, true); art.draw(1 / 30, 0.6, false, 4);
-  assert.equal(art.diagnostics().filter(voice => voice.inkLength > 0).length, 1,
-    'Exactly one voice introduces the first visible ink');
+  assert.ok(art.diagnostics().filter(voice => voice.inkLength > 0).length <= 2,
+    'First frame contains only the opening pens, not eight complete drawings');
+  assert.ok(art.stats.inkLength > 0, 'A real stroke appears during the first audible frame');
+  assert.ok(art.voices[0].art.activeLayer.age >= ENTRY_FIRST_STROKE_AGE,
+    'First pen starts with a short visible arc instead of a long blank lead-in');
   const firstLength = art.stats.inkLength;
   for (let i = 0; i < 11; i++) {
     art.updateSignals(full, 1 / 30, true); art.draw(1 / 30, 0.6, false, 4);
@@ -87,7 +90,7 @@ test('first clean-sheet sound staggers ink and eases pen speeds without restarti
   for (let i = 0; i < 36; i++) {
     art.updateSignals(full, 1 / 30, true); art.draw(1 / 30, 0.6, false, 4);
   }
-  assert.equal(ENTRY_STAGGER_SECONDS, 0.09);
+  assert.equal(ENTRY_STAGGER_SECONDS, 0.027);
   assert.ok(art.entrySeconds >= ENTRY_DURATION_SECONDS && art.entryFinished);
   assert.ok(art.diagnostics().every(voice => voice.inkLength > 0),
     'All eight engines have started by the end of the introduction');
@@ -102,8 +105,9 @@ test('first clean-sheet sound staggers ink and eases pen speeds without restarti
   assert.equal(art.entrySeconds, 0);
   assert.equal(art.entryFinished, false);
   art.updateSignals(full, 1 / 30, true); art.draw(1 / 30, 0.6, false, 4);
-  assert.equal(art.diagnostics().filter(voice => voice.inkLength > 0).length, 1,
-    'Clear Canvas also reveals fresh ink gradually');
+  assert.ok(art.stats.inkLength > 0, 'Clear Canvas resumes visibly on its first audible frame');
+  assert.ok(art.diagnostics().filter(voice => voice.inkLength > 0).length <= 2,
+    'Clear Canvas never flashes all eight drawings at once');
 });
 
 test('switching sound sources invalidates old worker targets without clearing painted ink', () => {

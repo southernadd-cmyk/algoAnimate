@@ -65,9 +65,11 @@ export function ensembleSettings(route, seed, orientation, palette, density = 25
 
 // Introduce first ink a few strokes at a time, without changing each voice's
 // audio-derived seed, pressure or scheduling once the paper is underway.
-export const ENTRY_STAGGER_SECONDS = 0.09;
-export const ENTRY_RAMP_SECONDS = 0.45;
-export const ENTRY_DURATION_SECONDS = 1.25;
+export const ENTRY_STAGGER_SECONDS = 0.027;
+export const ENTRY_RAMP_SECONDS = 0.12;
+export const ENTRY_DURATION_SECONDS = 0.26;
+// Reveal a few pixels of the first stroke immediately, never a complete mark.
+export const ENTRY_FIRST_STROKE_AGE = 0.008;
 
 export class LayeredArtwork {
   constructor(canvas) {
@@ -75,9 +77,11 @@ export class LayeredArtwork {
     this.context = canvas.getContext('2d', { alpha: false });
     this.entrySeconds = 0;
     this.entryFinished = false;
+    this.entryNextSlot = 0;
     this.voices = ENGINE_ROUTES.map(route => ({ route, art: new AnimatedArtwork(canvas),
       sound: new RoutedSound(route), flowing: false, building: false, generation: 0,
-      pendingStyle: null, requestedSeed: 'SOUND-READY', firstSoundSeed: true, lastSceneTime: -1 }));
+      pendingStyle: null, requestedSeed: 'SOUND-READY', firstSoundSeed: true,
+      entrySlot: null, lastSceneTime: -1 }));
   }
   get current() { return this.voices[0].art.current; }
   get ready() { return this.voices.every(voice => voice.art.current); }
@@ -107,7 +111,9 @@ export class LayeredArtwork {
   clearInk() {
     this.entrySeconds = 0;
     this.entryFinished = false;
+    this.entryNextSlot = 0;
     for (const voice of this.voices) {
+      voice.entrySlot = null;
       voice.generation++; voice.building = false; voice.pendingStyle = null;
       voice.art.clearInk(); voice.sound.reset(); voice.flowing = false;
       voice.firstSoundSeed = true; voice.lastSceneTime = -1;
@@ -144,17 +150,20 @@ export class LayeredArtwork {
     for (const mark of scene.paperMarks) {
       ctx.fillStyle = mark.colour; ctx.fillRect(mark.x, mark.y, mark.w, mark.h);
     }
-    // First ink grows in: voices enter one by one and the first pen movements
-    // ease to their normal sound-controlled speed. A pause later never restarts
-    // this introduction or moves any marks on the held paper.
+    // The first *active* voice makes a short real mark in the very first
+    // audible frame. Other active voices enter over ~200ms rather than
+    // withholding the composition for over a second. The normal pen clock,
+    // geometry, palettes and sound gating are unchanged after this entrance.
     const entering = !this.entryFinished;
     if (entering && this.voices.some(voice => voice.flowing)) this.entrySeconds += dt;
-    for (const [index, voice] of this.voices.entries()) {
-      const elapsed = this.entrySeconds - index * ENTRY_STAGGER_SECONDS;
+    for (const voice of this.voices) {
+      if (entering && voice.flowing && voice.entrySlot === null) voice.entrySlot = this.entryNextSlot++;
+      const elapsed = this.entrySeconds - (voice.entrySlot || 0) * ENTRY_STAGGER_SECONDS;
       const canDraw = voice.flowing && (!entering || elapsed > 0);
-      const ease = entering ? 0.25 + 0.75 * clamp(elapsed / ENTRY_RAMP_SECONDS) : 1;
+      const ease = entering ? 0.8 + 0.2 * clamp(elapsed / ENTRY_RAMP_SECONDS) : 1;
       voice.art.draw(voice.sound.features, canDraw ? dt * ease : 0, response,
-        gentle, cycle, canDraw, { paper: false, opacity: 0.72 });
+        gentle, cycle, canDraw, { paper: false, opacity: 0.72,
+          initialInkAge: entering && canDraw ? ENTRY_FIRST_STROKE_AGE : 0 });
     }
     if (this.entrySeconds >= ENTRY_DURATION_SECONDS) this.entryFinished = true;
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
