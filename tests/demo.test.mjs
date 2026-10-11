@@ -11,11 +11,11 @@ class Player extends EventTarget {
   removeAttribute(name) { if (name === 'src') this.src = ''; }
 }
 
-test('demo advances on real ended events, wraps after three tracks, and disconnect releases playback', async () => {
+test('demo advances on real ended events, wraps the playlist, and disconnect releases playback', async () => {
   const element = new Player(), titles = [];
   const playlist = new DemoPlaylist(element, { onTrack: track => titles.push(track.title) });
   await playlist.start();
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < DEMO_TRACKS.length; i++) {
     element.dispatchEvent(new Event('ended'));
     await Promise.resolve();
   }
@@ -25,19 +25,36 @@ test('demo advances on real ended events, wraps after three tracks, and disconne
   assert.equal(element.src, '');
   element.dispatchEvent(new Event('ended'));
   await Promise.resolve();
-  assert.equal(titles.length, 4, 'A disconnected demo cannot restart itself');
+  assert.equal(titles.length, DEMO_TRACKS.length + 1, 'A disconnected demo cannot restart itself');
 });
 
 test('disconnect while playback is loading ignores the obsolete play rejection', async () => {
   const element = new Player();
   let rejectPlay;
   element.play = () => new Promise((resolve, reject) => { rejectPlay = reject; });
-  const titles = [], playlist = new DemoPlaylist(element, { onTrack: track => titles.push(track.title) });
+  const titles = [], loading = [], playlist = new DemoPlaylist(element, {
+    onTrack: track => titles.push(track.title), onLoading: value => loading.push(value)
+  });
   const pending = playlist.start();
+  assert.equal(playlist.loading, true);
   playlist.stop();
   rejectPlay(new Error('Playback intentionally aborted'));
   await pending;
   assert.equal(titles.length, 0);
+  assert.equal(playlist.loading, false);
+  assert.deepEqual(loading, [true, false]);
+});
+
+test('failed playback clears the loading state for retry', async () => {
+  const element = new Player();
+  element.play = async () => { throw new Error('Network failure'); };
+  const playlist = new DemoPlaylist(element);
+  await assert.rejects(playlist.start(), /Network failure/);
+  assert.equal(playlist.loading, false);
+  element.play = Player.prototype.play;
+  await playlist.start();
+  assert.equal(playlist.loading, false);
+  assert.equal(element.paused, false);
 });
 
 test('demo reconnects reuse one media source, route to recording and speakers, and pause analysis immediately', async () => {

@@ -8,30 +8,39 @@ export const DEMO_TRACKS = Object.freeze([
 // Stream one track at a time through a single media element. Changing tracks
 // keeps the same Web Audio source and recording stream, without decoded caches.
 export class DemoPlaylist {
-  constructor(element, { onTrack = () => {}, onError = () => {} } = {}) {
+  constructor(element, { onTrack = () => {}, onLoading = () => {}, onError = () => {} } = {}) {
     this.element = element;
     this.onTrack = onTrack;
+    this.onLoading = onLoading;
     this.onError = onError;
     this.index = 0;
     this.active = false;
+    this.loading = false;
     this.generation = 0;
     element.addEventListener('ended', () => {
       if (this.active) this.next().catch(onError);
     });
   }
   get track() { return DEMO_TRACKS[this.index]; }
+  setLoading(loading) {
+    this.loading = loading;
+    this.onLoading(loading);
+  }
   async start(index = this.index) {
     const request = ++this.generation;
     this.index = (index + DEMO_TRACKS.length) % DEMO_TRACKS.length;
     this.active = true;
-    this.element.src = this.track.url;
-    this.element.load();
+    this.setLoading(true);
     try {
+      this.element.src = this.track.url;
+      this.element.load();
       await this.element.play();
       if (this.active && request === this.generation) this.onTrack(this.track, this.index);
     } catch (error) {
       // Disconnecting or changing a source intentionally aborts pending playback.
       if (this.active && request === this.generation) throw error;
+    } finally {
+      if (this.active && request === this.generation) this.setLoading(false);
     }
   }
   async next() {
@@ -40,6 +49,7 @@ export class DemoPlaylist {
   stop() {
     this.active = false;
     this.generation++;
+    this.setLoading(false);
     this.element.pause();
     this.element.removeAttribute('src');
     this.element.load();
