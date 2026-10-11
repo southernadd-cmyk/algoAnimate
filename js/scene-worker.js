@@ -10,7 +10,7 @@ self.onmessage = ({ data: { id, settings } }) => {
     A.rendererVersion = 7;
     A.svgRecorder = { precise: true, paths: [], paperMarks: [] };
     A.render(canvas, settings, 0.5);
-    const scene = { ...A.svgRecorder, seed: settings.seed, mode: settings.mode, style: settings.style, width: A.W, height: A.H, paper: settings.paper };
+    const scene = { ...A.svgRecorder, seed: settings.seed, mode: settings.mode, style: settings.style, inkMemory: settings.inkMemory, width: A.W, height: A.H, paper: settings.paper };
     A.svgRecorder = null;
     self.postMessage({ id, scene });
   } catch (error) {

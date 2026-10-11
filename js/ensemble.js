@@ -46,10 +46,16 @@ export class RoutedSound {
   }
 }
 
-export function ensembleSettings(route, seed, orientation, palette, density = 45, style = null) {
+export function ensembleSettings(route, seed, orientation, palette, density = 25, style = null) {
+  const amount = clamp(density / 100);
   return { ...DEFAULT_SETTINGS, seed, mode: route.id, orientation, palette,
-    elements: Math.round(8 + clamp(density / 100) * 20), density,
-    complexity: 46, recursion: 3, overdraw: 2, grain: 9, ...styleSettings(style) };
+    // The budget is for eight overlapping engines. Sparse drawings need fewer
+    // subjects and less internal detail, rather than eight sparse solo posters.
+    elements: Math.round(3 + 25 * amount ** 1.5), density: 4 + 96 * amount,
+    complexity: 12 + 34 * amount, recursion: Math.round(1 + 2 * amount),
+    negativeSpace: 92 - 48 * amount, nesting: 6 + 42 * amount,
+    overlap: 8 + 47 * amount, inkMemory: 0.12 + 0.58 * amount,
+    overdraw: 2, grain: 9, ...styleSettings(style) };
 }
 
 export class LayeredArtwork {

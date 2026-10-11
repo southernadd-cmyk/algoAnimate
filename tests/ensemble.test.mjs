@@ -115,6 +115,23 @@ test('all eight engines draw on one paper with 24 independent pen lanes and boun
   assert.deepEqual(art.voices.map(voice => voice.art.stats.progress), progress);
 });
 
+test('sparse ink retention keeps less old ink while all 24 pen lanes continue and silence still holds it', () => {
+  function drawWithMemory(memory) {
+    const { art } = fixture();
+    for (const voice of art.voices) voice.art.current.inkMemory = memory;
+    for (let i = 0; i < 180; i++) {
+      art.updateSignals(full, 1 / 30, true); art.draw(1 / 30, 0.6, false, 1);
+    }
+    return art;
+  }
+  const sparse = drawWithMemory(0.12), dense = drawWithMemory(0.7);
+  assert.ok(sparse.stats.inkLength < dense.stats.inkLength * 0.55, 'Less ink is present, with the same native paths and opacity');
+  assert.ok(sparse.diagnostics().every(engine => engine.penTips > 0 && engine.inkLength > 0));
+  const held = sparse.stats.inkLength;
+  sparse.updateSignals(SILENCE, 0.1, false); sparse.draw(0.1, 0.6, false, 1);
+  sparse.draw(1, 0.6, false, 1); assert.equal(sparse.stats.inkLength, held);
+});
+
 test('changing treble leaves the bass clock unchanged and native portrait transforms survive compositing', () => {
   function advance(treble) {
     const { art } = fixture();

@@ -1,4 +1,4 @@
-# ALGO / ANIMATE — v0.06
+# ALGO / ANIMATE — v0.07
 
 **Sound, in living ink.** A browser-only audio experiment using the golden ratio
 and ALGO / ART's expressive marker renderer.
@@ -14,7 +14,7 @@ and ALGO / ART's expressive marker renderer.
    Each voice has its own pen profile and colour family, both randomised at
    its next drawing. The cards show actual ink samples and live input meters.
    Choose a colour mood and landscape or portrait paper.
-3. Adjust sensitivity, pen response, layer density, drawing-cycle duration and smoothing.
+3. Adjust composition density, sensitivity, pen response, drawing-cycle duration and smoothing.
    **Gentle motion** starts enabled if your system requests reduced motion.
 4. Click **Record**, then **Stop recording** and **Download video**. Recordings
    contain the artwork and sound; optionally include the waveform. A take stops
@@ -72,8 +72,11 @@ its actual container. The canvas shape is preserved (1400 × 1000 landscape or
   curves, wobble, overdraw, ink colours, opacity, dryness and portrait transforms.
   This provides 24 pen lanes across eight independent clocks. Layers draw into
   the same canvas; paper is painted once so one engine cannot erase another.
-  Each engine retains at most three ink generations. Layer density controls the
-  marks per engine, with reduced defaults and translucent ink for readable overlap.
+  Each engine retains at most three ink generations. Composition density spans
+  0–100%, with a more open 25% default. The sparse end reduces subjects, internal
+  detail, recursion, nesting and overlap, requests more negative space and shortens
+  the visible ink history. All eight engines still draw; density does not simply
+  make their ink more transparent. Native engine minimum geometry is retained.
 - Ink stays in place after it is drawn. Older strokes recede from their start
   while fresh ink grows from the pen tips, so the paper keeps changing without
   whole-image holds or crossfades while sound is present. A fresh composition with the current sound-derived seed and a new ink kit
@@ -94,8 +97,14 @@ its actual container. The canvas shape is preserved (1400 × 1000 landscape or
   Silence freezes the actual pixels and discards obsolete pending targets.
   Sound resumes drawing from the held frame; a steady input can keep tracing
   its current seed with fresh pens and palettes each cycle. Gentle motion slows the pens and pressure response.
-- Canvas video and a clone of the Web Audio recording track are combined into a
-  `MediaStream`. Stopping a take preserves the connected sound source. Chrome's
+- Tab and microphone capture request echo cancellation, noise suppression and
+  automatic gain control off. Supported constraints are reapplied to the granted
+  track. Browsers can reject or ignore capture preferences; read-only diagnostics
+  report actual processing settings where available, without device identifiers.
+  Canvas video and a clone of the original captured audio track are combined into
+  a `MediaStream`, preserving its channels and levels without passing through the
+  analysis graph. Files and the generated demo use the Web Audio destination.
+  Stopping a take preserves the connected sound source. Chrome's
   streaming WebM export receives duration metadata so players report its length;
   the large media payload is preserved in Blob slices without re-encoding it.
 
@@ -112,7 +121,7 @@ pixels. The public palette hook is adapted in `js/ink-palette.js`, in both the
 worker and fallback renderer; no vendor source is modified.
 
 Live capture timing, noise, sample rates and browser FFT behaviour can differ,
-so v0.06 does not promise bit-identical videos across devices or mathematical
+so v0.07 does not promise bit-identical videos across devices or mathematical
 uniqueness for every possible sound. Frame rate targets 30 FPS and
 depends on the device, engine and number of marks. This is a prototype.
 
@@ -152,7 +161,9 @@ real bass-only/mid-only/treble-only route
 isolation, measured frame rate, continuous marker drawing between seed changes, captured-audio silence
 and resume, exact frozen artwork pixels, silent intervals in exported video,
 live demo analysis,
-recording with audio, waveform export, source
+recording with audio, decoded stereo level stability, deliberate 20 dB changes,
+source silence, composition coverage compared with the previous minimum density,
+all eight engines drawing at minimum density, waveform export, source
 cleanup, permission errors, audio-file replay, portrait rendering and mobile
 layout. It inspects the exported video with `ffprobe`, saves screenshots and a
 sample take as workflow artifacts, then deploys only after those checks pass.

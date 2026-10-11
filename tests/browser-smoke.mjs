@@ -58,10 +58,13 @@ async function connectControlledTab() {
     const video = canvas.captureStream(1);
     const stream = new MediaStream([...destination.stream.getAudioTracks(), ...video.getVideoTracks()]);
     window.testSignal = { context, oscillators, bands, gain, stream };
-    navigator.mediaDevices.getDisplayMedia = async () => stream;
+    navigator.mediaDevices.getDisplayMedia = async options => { window.captureOptions = options; return stream; };
   });
   await page.click('#connectTab');
   await page.waitForFunction(() => window.AlgoAnimate.diagnostics().source === 'tab' && window.AlgoAnimate.diagnostics().drawing.flowing);
+  const options = await page.evaluate(() => window.captureOptions);
+  for (const key of ['autoGainControl', 'noiseSuppression', 'echoCancellation']) assert.equal(options.audio[key], false, key + ' is disabled for music capture');
+  assert.equal((await state()).audio.recordingPath, 'direct-capture');
 }
 async function setCapturedBands(values, pulse = false) {
   await page.evaluate(({ values, pulse }) => {
@@ -199,6 +202,137 @@ function wav(seconds = 3, sampleRate = 22050) {
   buffer.writeUInt16LE(2, 32); buffer.writeUInt16LE(16, 34); buffer.write('data', 36); buffer.writeUInt32LE(size * 2, 40);
   for (let i = 0; i < size; i++) buffer.writeInt16LE(Math.round(Math.sin(i * 440 / sampleRate * Math.PI * 2) * 9000), 44 + i * 2);
   return buffer;
+}
+
+async function checkSparseComposition() {
+  const comparison = await page.evaluate(async () => {
+    const [{ SceneBuilder, DEFAULT_SETTINGS }, { LayeredArtwork, ENGINE_ROUTES, ensembleSettings },
+      { styleSettings }, { SILENCE }] = await Promise.all([
+      import('./js/scenes.js'), import('./js/ensemble.js'), import('./js/styles.js'), import('./js/features.js')]);
+    const builder = new SceneBuilder(), styles = window.AlgoAnimate.diagnostics().engines.map(engine => engine.style);
+    const keys = ['level', 'bass', 'mid', 'treble', 'centroid', 'flux'];
+    const raw = Object.fromEntries(keys.map(key => [key, 0.4]));
+    const sound = { ...SILENCE, ...raw, raw, active: true, rms: 0.1 };
+    const result = {};
+    try {
+      for (const variant of ['previousMinimum', 'sparse', 'dense']) {
+        const scenes = await Promise.all(ENGINE_ROUTES.map((route, index) => {
+          const seed = 'SPACE-CHECK-' + route.id, style = styles[index];
+          const settings = variant === 'previousMinimum'
+            ? { ...DEFAULT_SETTINGS, seed, mode: route.id, orientation: 'landscape', palette: 'marker',
+              elements: 12, density: 20, complexity: 46, recursion: 3, overdraw: 2, grain: 9, ...styleSettings(style) }
+            : ensembleSettings(route, seed, 'landscape', 'marker', variant === 'sparse' ? 0 : 100, style);
+          return builder.build(settings);
+        }));
+        assertScenes(scenes);
+        const canvas = document.createElement('canvas'), art = new LayeredArtwork(canvas);
+        art.setScenes(scenes, true);
+        const thumb = document.createElement('canvas'); thumb.width = 350; thumb.height = 250;
+        const ctx = thumb.getContext('2d', { willReadFrequently: true });
+        let totalInk = 0, totalCoverage = 0, drawingFrames = 0;
+        for (let frame = 0; frame < 18; frame++) {
+          art.updateSignals(sound, 0.1, true); art.draw(0.1, 0.6, false, 1);
+          ctx.drawImage(canvas, 0, 0, 350, 250);
+          const data = ctx.getImageData(0, 0, 350, 250).data;
+          let ink = 0;
+          for (let i = 0; i < data.length; i += 4) if (data[i] < 205 || data[i + 1] < 205 || data[i + 2] < 185) ink++;
+          totalInk += art.stats.inkLength; totalCoverage += ink / (350 * 250);
+          if (art.diagnostics().every(engine => engine.penTips > 0)) drawingFrames++;
+        }
+        result[variant] = { meanInkLength: totalInk / 18, meanCoverage: totalCoverage / 18,
+          drawingFrames, paths: scenes.reduce((sum, scene) => sum + scene.paths.length, 0), frame: canvas.toDataURL() };
+      }
+    } finally { builder.worker?.terminate(); }
+    function assertScenes(scenes) {
+      if (scenes.some(scene => !scene.paths.length)) throw new Error('Sparse composition removed an entire engine');
+    }
+    return result;
+  });
+  for (const [name, sample] of Object.entries(comparison)) {
+    await writeFile(resolve(results, 'density-' + name + '.png'), Buffer.from(sample.frame.split(',')[1], 'base64'));
+    delete sample.frame;
+  }
+  assert.ok(comparison.sparse.meanInkLength < comparison.previousMinimum.meanInkLength * 0.5, 'Minimum density has substantially less ink than the old minimum');
+  assert.ok(comparison.sparse.meanCoverage < comparison.previousMinimum.meanCoverage * 0.65, 'Actual sparse pixels leave substantially more paper open');
+  assert.ok(comparison.sparse.meanCoverage < comparison.dense.meanCoverage * 0.5, 'Density changes coverage, not just opacity');
+  assert.ok(comparison.sparse.drawingFrames >= 15, 'All eight sparse engines keep drawing throughout the cycle');
+  assert.equal(await page.locator('#density').getAttribute('min'), '0');
+  const before = (await state()).compositions;
+  await setRange('density', 0); await page.locator('#density').dispatchEvent('change');
+  await page.waitForFunction(count => window.AlgoAnimate.diagnostics().compositions > count && !window.AlgoAnimate.diagnostics().building, before);
+  assert.equal((await state()).engines.length, 8);
+  const restore = (await state()).compositions;
+  await setRange('density', 25); await page.locator('#density').dispatchEvent('change');
+  await page.waitForFunction(count => window.AlgoAnimate.diagnostics().compositions > count && !window.AlgoAnimate.diagnostics().building, restore);
+  return comparison;
+}
+
+async function checkAudioFidelity() {
+  // A real stereo track with deliberate 20 dB steps and silence. Decode the
+  // exported file, so recorder/channel/gain failures cannot pass on UI state.
+  const originalControls = await page.evaluate(() => Object.fromEntries(['sensitivity', 'smoothing', 'motion'].map(id => [id, document.getElementById(id).value])));
+  await page.evaluate(async () => {
+    const context = new AudioContext({ sampleRate: 48000 });
+    const destination = context.createMediaStreamDestination(), merger = context.createChannelMerger(2), level = context.createGain();
+    level.channelCount = 2; level.channelCountMode = 'explicit'; level.channelInterpretation = 'discrete';
+    merger.connect(level); level.connect(destination);
+    const oscillators = [];
+    for (const [channel, hz, amplitude] of [[0, 440, 0.3], [1, 6000, 0.12]]) {
+      const oscillator = context.createOscillator(), gain = context.createGain();
+      oscillator.frequency.value = hz; gain.gain.value = amplitude;
+      oscillator.connect(gain); gain.connect(merger, 0, channel); oscillator.start(); oscillators.push(oscillator);
+    }
+    await context.resume();
+    const canvas = document.createElement('canvas'); canvas.width = canvas.height = 10;
+    canvas.getContext('2d').fillRect(0, 0, 10, 10);
+    const stream = new MediaStream([...destination.stream.getAudioTracks(), ...canvas.captureStream(1).getVideoTracks()]);
+    window.fidelitySignal = { context, level, oscillators, stream };
+    navigator.mediaDevices.getDisplayMedia = async () => stream;
+  });
+  await page.click('#connectTab'); await page.waitForFunction(() => window.AlgoAnimate.diagnostics().source === 'tab');
+  assert.equal((await state()).audio.recordingPath, 'direct-capture');
+  await page.click('#record'); await page.waitForFunction(() => window.AlgoAnimate.diagnostics().recording);
+  await page.evaluate(() => {
+    const { context, level } = window.fidelitySignal, now = context.currentTime;
+    level.gain.setValueAtTime(1, now); level.gain.setValueAtTime(0.1, now + 2.4);
+    level.gain.setValueAtTime(0, now + 4.8); level.gain.setValueAtTime(1, now + 5.6);
+  });
+  await page.waitForTimeout(500);
+  await setRange('sensitivity', 300); await setRange('smoothing', 100); await setRange('motion', 100);
+  await page.waitForTimeout(8000);
+  await page.click('#stopRecording'); await page.waitForFunction(() => !window.AlgoAnimate.diagnostics().recordingBusy);
+  const path = resolve(results, 'audio-fidelity-stereo.webm'), info = await download(path);
+  assert.equal(info.streams.find(stream => stream.codec_type === 'audio').channels, 2, 'Stereo channels survive export');
+  assert.ok(await page.evaluate(() => window.fidelitySignal.stream.getAudioTracks()[0].readyState === 'live'), 'Finishing a take leaves capture audio live');
+  const pcm = execFileSync('ffmpeg', ['-v', 'error', '-i', path, '-vn', '-ar', '48000', '-ac', '2', '-f', 'f32le', '-'], { maxBuffer: 16 * 1024 * 1024 });
+  function rms(from, to) {
+    const start = Math.round(from * 48000), end = Math.min(pcm.length / 8, Math.round(to * 48000)), sums = [0, 0];
+    for (let frame = start; frame < end; frame++) for (let channel = 0; channel < 2; channel++) {
+      const value = pcm.readFloatLE(frame * 8 + channel * 4); sums[channel] += value * value;
+    }
+    return sums.map(sum => Math.sqrt(sum / (end - start)));
+  }
+  const db = value => 20 * Math.log10(Math.max(1e-12, value));
+  const phases = {};
+  for (const [name, from, to, gain] of [['loud', 0.7, 2, 1], ['quiet', 3, 4.3, 0.1], ['restored', 6.2, 7.6, 1]]) {
+    const levels = rms(from, to).map(db), windows = [];
+    for (let time = from; time + 0.2 <= to; time += 0.2) windows.push(rms(time, time + 0.2).map(db));
+    const spread = [0, 1].map(channel => Math.max(...windows.map(w => w[channel])) - Math.min(...windows.map(w => w[channel])));
+    for (const channel of [0, 1]) {
+      const expected = db([0.3, 0.12][channel] * gain / Math.sqrt(2));
+      assert.ok(Math.abs(levels[channel] - expected) < 0.4, name + ' preserves the known source level');
+      assert.ok(spread[channel] < 0.3, name + ' has no volume pumping during animation/control changes');
+    }
+    phases[name] = { db: levels, maximumVariationDb: spread };
+  }
+  const silenceDb = rms(5.2, 5.4).map(db);
+  assert.ok(silenceDb.every(level => level < -70), 'Source silence is silent in the export');
+  for (const channel of [0, 1]) assert.ok(Math.abs(phases.loud.db[channel] - phases.quiet.db[channel] - 20) < 0.3, 'Intentional 20 dB dynamics remain intact');
+  await page.click('#stopAudio');
+  await page.evaluate(async () => { window.fidelitySignal.oscillators.forEach(node => node.stop()); await window.fidelitySignal.context.close(); });
+  for (const [id, value] of Object.entries(originalControls)) await setRange(id, value);
+  await writeFile(resolve(results, 'audio-fidelity.json'), JSON.stringify({ phases, silenceDb }, null, 2));
+  return { phases, silenceDb, stereoChannels: 2 };
 }
 
 try {
@@ -465,6 +599,11 @@ try {
   assert.ok((await state()).recordedBytes > 0, 'Ending a file finalises a recording');
   console.log('Audio files play and replay; source end finalises an active take.');
 
+  const compositionDensity = await checkSparseComposition();
+  console.log('Sparse composition leaves more open paper while all eight engines keep drawing.');
+  const audioFidelity = await checkAudioFidelity();
+  console.log('Decoded stereo export preserves fixed levels, deliberate 20 dB changes and silence.');
+
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(200);
   await page.evaluate(() => scrollTo(0, 0));
@@ -486,7 +625,8 @@ try {
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'Narrow mobile has no horizontal overflow');
   await page.screenshot({ path: resolve(results, 'mobile-landscape.png'), fullPage: true });
   assert.deepEqual(errors, [], 'No uncaught application errors');
-  const summary = { version: '0.06', desktop: 'passed', engines: 8, pens: 24, minimumMeasuredFPS: measuredFPS,
+  const summary = { version: '0.07', desktop: 'passed', engines: 8, pens: 24, minimumMeasuredFPS: measuredFPS,
+    compositionDensity, audioFidelity,
     calibratedMeters, quietTreble, demoBandPeaks, meterSilenceAndSensitivity: 'passed',
     distinctNativePensAndPalettes: 'passed', styleChanges, steadyToneFreshKits: 'passed', keyboardControls: 'passed',
     realAudioBandIsolation: 'passed', demoAnalysis: 'passed',

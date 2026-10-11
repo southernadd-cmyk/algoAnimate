@@ -45,7 +45,7 @@ export class SceneBuilder {
     A.svgRecorder = { precise: true, paths: [], paperMarks: [] };
     try {
       A.render(canvas, settings, 0.5);
-      return { ...A.svgRecorder, seed: settings.seed, mode: settings.mode, style: settings.style, width: A.W, height: A.H, paper: settings.paper };
+      return { ...A.svgRecorder, seed: settings.seed, mode: settings.mode, style: settings.style, inkMemory: settings.inkMemory, width: A.W, height: A.H, paper: settings.paper };
     } finally { A.svgRecorder = null; }
   }
   build(settings) {
@@ -123,7 +123,7 @@ export class AnimatedArtwork {
   draw(features, dt, response = 0.6, gentle = false, cycle = 4, flowing = features.active, { paper = true, opacity = 1 } = {}) {
     if (!this.current) return;
     this.flowing = flowing;
-    const memory = gentle ? 0.8 : 0.7;
+    const memory = (this.current.inkMemory ?? 0.7) * (gentle ? 8 / 7 : 1);
     if (flowing) {
       if (!this.layers.length) {
         // Clear the ready-state drawing along its strokes while the first

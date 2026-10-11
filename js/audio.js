@@ -1,9 +1,30 @@
+export const UNPROCESSED_AUDIO = Object.freeze({
+  echoCancellation: false, noiseSuppression: false, autoGainControl: false
+});
+const PROCESSING_KEYS = Object.keys(UNPROCESSED_AUDIO);
+
+async function unprocessedTrack(track) {
+  // Capture preferences can be ignored. Reapply supported constraints to the
+  // granted track and retain actual settings for diagnosing browser behaviour.
+  const capabilities = track.getCapabilities?.() || {};
+  const constraints = Object.fromEntries(PROCESSING_KEYS.filter(key =>
+    Array.isArray(capabilities[key]) && capabilities[key].includes(false)).map(key => [key, false]));
+  let constraintsRejected = false;
+  if (track.applyConstraints && Object.keys(constraints).length) {
+    try { await track.applyConstraints(constraints); }
+    catch { constraintsRejected = true; }
+  }
+  return { constraintsRejected, settings: track.getSettings?.() || {} };
+}
+
 export class AudioInput {
   constructor({ onEnded = () => {} } = {}) {
     this.onEnded = onEnded;
     this.context = null;
     this.kind = null;
     this.stream = null;
+    this.capturedAudio = null;
+    this.captureStatus = null;
     this.source = null;
     this.monitor = null;
     this.cleanup = null;
@@ -41,7 +62,7 @@ export class AudioInput {
     // Call directly from the click gesture, before awaiting any other operation.
     const stream = await navigator.mediaDevices.getDisplayMedia({
       video: { displaySurface: 'browser', frameRate: 1 },
-      audio: { suppressLocalAudioPlayback: false },
+      audio: { ...UNPROCESSED_AUDIO, suppressLocalAudioPlayback: false },
       selfBrowserSurface: 'exclude', systemAudio: 'include', surfaceSwitching: 'exclude'
     });
     await this.useStream(stream, 'tab');
@@ -50,22 +71,26 @@ export class AudioInput {
   async microphone() {
     if (!navigator.mediaDevices?.getUserMedia) throw new Error('Microphone capture is unavailable in this browser.');
     const stream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }, video: false
+      audio: { ...UNPROCESSED_AUDIO }, video: false
     });
     await this.useStream(stream, 'microphone');
   }
 
   async useStream(stream, kind) {
-    if (!stream.getAudioTracks().some(track => track.readyState === 'live')) {
+    const track = stream.getAudioTracks().find(track => track.readyState === 'live');
+    if (!track) {
       stream.getTracks().forEach(track => track.stop());
       throw new Error('No audio was shared. Choose a browser tab and turn on “Share tab audio”, then try again.');
     }
     try {
       await this.ready();
+      const captureStatus = await unprocessedTrack(track);
+      if (track.readyState !== 'live') throw new Error('The shared audio ended before it could be connected. Try sharing again.');
       this.stop();
       this.stream = stream;
-      const audioOnly = new MediaStream(stream.getAudioTracks());
-      this.attach(this.context.createMediaStreamSource(audioOnly), kind);
+      this.capturedAudio = new MediaStream([track]);
+      this.captureStatus = captureStatus;
+      this.attach(this.context.createMediaStreamSource(this.capturedAudio), kind);
       // Keep the captured video track alive: some browsers tie audio to it.
       // Its pixels are never displayed or recorded by AlgoAnimate.
       for (const track of stream.getTracks()) track.onended = () => {
@@ -76,6 +101,20 @@ export class AudioInput {
       if (this.stream === stream) this.stop();
       throw error;
     }
+  }
+
+  get recordingStream() {
+    // Native capture already has the original channels and level. Keep its
+    // recording out of the analysis graph and its channel mixing/resampling.
+    return this.capturedAudio || this.destination?.stream;
+  }
+  diagnostics() {
+    const track = this.capturedAudio?.getAudioTracks()[0];
+    const settings = track?.getSettings?.() || this.captureStatus?.settings || {};
+    const keys = ['channelCount', 'sampleRate', ...PROCESSING_KEYS];
+    return { recordingPath: this.capturedAudio ? 'direct-capture' : 'web-audio',
+      constraintsRejected: this.captureStatus?.constraintsRejected || false,
+      settings: Object.fromEntries(keys.filter(key => settings[key] !== undefined).map(key => [key, settings[key]])) };
   }
 
   async file(element) {
@@ -167,6 +206,7 @@ export class AudioInput {
     this.cleanup?.(); this.cleanup = null;
     if (this.stream) for (const track of this.stream.getTracks()) { track.onended = null; track.stop(); }
     this.stream = null;
+    this.capturedAudio = null; this.captureStatus = null;
     if (this.mediaElement) this.mediaElement.pause();
     this.mediaElement = null;
     if (this.source) this.source.disconnect();

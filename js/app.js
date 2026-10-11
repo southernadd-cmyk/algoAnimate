@@ -255,7 +255,7 @@ $('record').addEventListener('click', async () => {
     recordingCanvas.width = art.width;
     recordingCanvas.height = art.height + (recordingWithWaveform ? 156 : 0);
     paintRecording();
-    recorder.start(recordingCanvas, audio.destination.stream);
+    recorder.start(recordingCanvas, audio.recordingStream);
     message('Recording started. The download will contain this artwork and the incoming sound.');
   } catch (error) { message(error.message, true); }
   finally { startRecordPending = false; syncControls(); }
@@ -389,9 +389,9 @@ window.addEventListener('pagehide', () => { if (recorder.active) recorder.stop()
 
 // Small read-only diagnostics surface for smoke tests and bug reports.
 window.AlgoAnimate = Object.freeze({
-  version: '0.06',
+  version: '0.07',
   diagnostics: () => ({
-    source: audio.kind, seed: artwork.drawnSeed, engine: 'ensemble',
+    source: audio.kind, audio: audio.diagnostics(), seed: artwork.drawnSeed, engine: 'ensemble',
     engines: artwork.diagnostics(), compositions: artwork.sceneCount,
     paths: artwork.pathCount, worker: Boolean(builder.worker), building: isBuilding(),
     dimensions: [art.width, art.height], features: { level: features.level, bass: features.bass,
