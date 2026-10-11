@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ENGINE_ROUTES, RoutedSound, ensembleSettings, profileShift } from '../js/ensemble.js';
+import { ENGINE_ROUTES, RoutedSound, ensembleSettings, profileShift,
+  EARLY_REFRESH_PROFILE_DELTA, EARLY_REFRESH_COOLDOWN_SECONDS } from '../js/ensemble.js';
 import { StyleDeck } from '../js/styles.js';
 import { SILENCE } from '../js/features.js';
 import { goldenLanePoint, interlockRenderer, GOLDEN_ANGLE, goldenRotationPhase, GOLDEN_SCAFFOLD_SLOTS } from '../js/phi-layout.js';
@@ -36,6 +37,18 @@ test('phrase profiles and composition controls ignore unrelated sound and hold d
     const held = a.profile; a.update(SILENCE, 1, false); assert.deepEqual(a.profile, held);
   }
 });
+test('early composition refresh requires a substantial smoothed shift and enforces a longer cooldown', () => {
+  assert.equal(EARLY_REFRESH_PROFILE_DELTA, 0.25);
+  assert.equal(EARLY_REFRESH_COOLDOWN_SECONDS, 2.5);
+  const before = profile(0.3);
+  assert.equal(profileShift(before, { ...before, bass: 0.54 }, ['bass']), false,
+    'a 0.24 change must not restart the composition');
+  assert.equal(profileShift(before, { ...before, bass: 0.55 }, ['bass']), true,
+    'a 0.25 change is a meaningful refresh');
+  assert.equal(profileShift(before, { ...before, bass: 0.8 }, ['mid']), false,
+    'unassigned changes must never refresh this route');
+});
+
 test('composition parameters and early refresh depend only on each engine assigned inputs', () => {
   const keys = ['level', 'bass', 'mid', 'treble', 'centroid', 'flux'];
   for (const route of ENGINE_ROUTES) {

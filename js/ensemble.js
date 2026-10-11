@@ -54,8 +54,11 @@ export class RoutedSound {
   }
 }
 
-// Ignore small fluctuations and all measurements outside the route.
-export function profileShift(previous, current, inputs, threshold = 0.15) {
+// Resist short audio fluctuations without dulling the immediate pen animation.
+// Every early composition must clear both the feature-change and time thresholds.
+export const EARLY_REFRESH_PROFILE_DELTA = 0.25;
+export const EARLY_REFRESH_COOLDOWN_SECONDS = 2.5;
+export function profileShift(previous, current, inputs, threshold = EARLY_REFRESH_PROFILE_DELTA) {
   if (!previous || !current) return false;
   return inputs.some(key => Math.abs(clamp(previous[key] ?? 0) - clamp(current[key] ?? 0)) >= threshold);
 }

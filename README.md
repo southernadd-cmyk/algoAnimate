@@ -163,8 +163,8 @@ If a rare Automatic Marks seed makes every proposed stroke fall inside a protect
 negative-space void, the adapter deterministically retries once without the
 optional void mask. The original AlgoArt renderer and sound-derived seed remain
 unchanged; successful first passes and all other engines are unaffected.
-Substantial changes in the smoothed assigned signal (at least 0.15) request a
-new composition early, with a 1.25-second cooldown; small variations wait for
+Substantial changes in the smoothed assigned signal (at least 0.25) request a
+new composition early, with a 2.5-second cooldown; small variations wait for
 the normal cycle. Existing strokes keep their geometry and pressure, and an
 early refresh becomes visible only after the new scene builds and begins its
 ink handoff. Similar sound steers similar controls, while hashed

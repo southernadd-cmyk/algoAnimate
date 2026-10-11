@@ -1,7 +1,7 @@
 import { AudioInput, describeCaptureError } from './audio.js';
 import { FeatureTracker, SoundGate, SILENCE, clamp, evolutionInterval } from './features.js';
 import { SceneBuilder, DEFAULT_SETTINGS } from './scenes.js';
-import { LayeredArtwork, ensembleSettings, profileShift } from './ensemble.js';
+import { LayeredArtwork, ensembleSettings, profileShift, EARLY_REFRESH_COOLDOWN_SECONDS } from './ensemble.js';
 import { goldenRotationPhase } from './phi-layout.js';
 import { VideoRecorder, MAX_TAKE_SECONDS } from './recording.js';
 import { StyleDeck, styleSettings } from './styles.js';
@@ -637,7 +637,7 @@ function frame(now) {
       && (!voice.firstSoundSeed || artwork.entryFinished)
       && (voice.firstSoundSeed || voice.art.needsScene(cycle, $('gentle').checked)
         || (artwork.entryFinished && !voice.art.queued
-          && clock - voice.lastSceneTime >= 1.25
+          && clock - voice.lastSceneTime >= EARLY_REFRESH_COOLDOWN_SECONDS
           && profileShift(voice.lastCompositionProfile, voice.sound.profile, voice.route.inputs)))
       && clock - voice.lastSceneTime >= 0.25) {
       voice.lastSceneTime = clock; generateVoice(voice, seed);
