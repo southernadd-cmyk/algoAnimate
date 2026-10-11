@@ -62,7 +62,10 @@ export function profileShift(previous, current, inputs, threshold = 0.15) {
 export function ensembleSettings(route, seed, orientation, palette, density = 25, style = null, profile = null, phase = 0) {
   const amount = clamp(density / 100);
   const owns = key => route.inputs.includes(key);
-  const energy = profile ? clamp(profile.level) : 0.5;
+  // Derive route energy from assigned inputs rather than trusting a caller's
+  // global level field. This also protects direct composition-builder calls.
+  const energy = profile ? clamp(route.inputs.reduce((sum, key) => sum + clamp(profile[key] ?? 0), 0)
+    / route.inputs.length) : 0.5;
   const bass = owns('bass') ? clamp(profile?.bass || 0) : 0;
   const onsets = owns('flux') ? clamp(profile?.flux || 0) : 0;
   const brightness = owns('centroid') ? clamp(profile?.centroid || 0)
