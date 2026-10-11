@@ -18,7 +18,7 @@ const bandMeters = new BandMeters();
 const soundGate = new SoundGate();
 let features = SILENCE, pending = false, fileURL = null, fileLabel = '', sourceLabel = '';
 let layoutGeneration = 0, preparing = false;
-let clock = 0, previousFrame = 0, uiTime = 0, onsetUntil = 0;
+let clock = 0, previousFrame = 0, uiTime = 0, onsetUntil = 0, clearHoldUntil = 0;
 let frames = 0, fpsStart = performance.now(), fps = 0, recordingWithWaveform = false;
 let startRecordPending = false;
 const waveHistory = [];
@@ -293,8 +293,13 @@ $('snapshot').addEventListener('click', () => {
 });
 $('clearCanvas').addEventListener('click', () => {
   artwork.clearInk();
+  // Live audio would otherwise redraw ink on the very next animation frame,
+  // so the user never sees the cleared sheet (especially on touch screens).
+  clearHoldUntil = performance.now() + 1100;
+  artwork.draw(0, +$('motion').value / 100, $('gentle').checked, evolutionInterval(+$('evolution').value));
+  $('clearCanvas').textContent = 'Canvas cleared ✓';
   message(audio.kind
-    ? 'Canvas cleared. Your audio is still connected; fresh marks will follow the sound.'
+    ? 'Canvas cleared. The paper will stay empty briefly, then the sound starts fresh ink.'
     : 'Canvas cleared. Connect audio to draw again.');
 });
 $('fullscreen').addEventListener('click', async () => {
@@ -306,6 +311,7 @@ $('fullscreen').addEventListener('click', async () => {
 });
 
 function updateUI(now) {
+  $('clearCanvas').textContent = now < clearHoldUntil ? 'Canvas cleared ✓' : 'Clear canvas ↺';
   const active = Boolean(audio.kind);
   const paused = audio.kind === 'file' && player.paused;
   const label = recorder.active ? 'RECORDING' : paused ? 'AUDIO PAUSED' : active && soundGate.open
@@ -377,7 +383,7 @@ function frame(now) {
   const available = Boolean(audio.kind) && !(audio.kind === 'file' && player.paused);
   bandMeters.update(features.bandRms, dt, features.active, available && Boolean(data));
   const flowing = soundGate.update(features.active, dt, available && Boolean(data));
-  for (const voice of artwork.updateSignals(features, dt, flowing && available && Boolean(data))) {
+  for (const voice of artwork.updateSignals(features, dt, flowing && available && Boolean(data) && now >= clearHoldUntil)) {
     // Cancel only this route's obsolete work; the other engines keep drawing.
     voice.generation++; voice.building = false; voice.pendingStyle = null;
     voice.art.discardQueued(); voice.requestedSeed = voice.art.drawnSeed || DEFAULT_SETTINGS.seed;
@@ -406,7 +412,7 @@ window.addEventListener('pagehide', () => { if (recorder.active) recorder.stop()
 
 // Small read-only diagnostics surface for smoke tests and bug reports.
 window.AlgoAnimate = Object.freeze({
-  version: '0.08',
+  version: '0.09',
   diagnostics: () => ({
     source: audio.kind, audio: audio.diagnostics(), seed: artwork.drawnSeed, engine: 'ensemble',
     engines: artwork.diagnostics(), compositions: artwork.sceneCount,
@@ -415,6 +421,7 @@ window.AlgoAnimate = Object.freeze({
       mid: features.mid, treble: features.treble, rms: features.rms, active: features.active },
     bandMeters: { scale: [-60, 0], ...bandMeters.bands },
     recording: recorder.active, recordingBusy: recorder.busy,
+    clearHold: performance.now() < clearHoldUntil,
     recordedBytes: recorder.result?.blob.size || 0, recordingType: recorder.result?.type || recorder.mimeType,
     drawing: { ...artwork.stats, blank: artwork.voices.every(voice => voice.art.blank), pens: 24,
       queuedSeed: artwork.voices.find(voice => voice.art.queued)?.art.queued.seed || null, flowing: artwork.flowing },

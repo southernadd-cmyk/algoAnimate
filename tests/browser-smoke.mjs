@@ -437,8 +437,10 @@ try {
   assert.equal(clearState.drawing.blank, true, 'Ink stays cleared during captured silence');
   assert.equal(clearState.drawing.layers, 0, 'All drawing layers are removed');
   assert.equal(clearState.drawing.inkLength, 0, 'No old strokes return after a frame');
+  assert.equal(clearState.clearHold, true, 'Canvas stays clear long enough to be seen on a touch screen');
   await resumeCapturedTab();
-  await page.waitForFunction(() => window.AlgoAnimate.diagnostics().drawing.inkLength > 0, null, { timeout: 8000 });
+  await page.waitForFunction(() => !window.AlgoAnimate.diagnostics().clearHold
+    && window.AlgoAnimate.diagnostics().drawing.inkLength > 0, null, { timeout: 8000 });
   assert.equal((await state()).drawing.blank, false, 'Sound resumes new ink without reconnecting');
   console.log(`Captured audio pauses/resumes the actual ink; silence stopped drawing in ${Math.round(tabSilenceStopMs)} ms.`);
 
@@ -639,9 +641,67 @@ try {
   await page.setViewportSize({ width: 360, height: 800 });
   await page.waitForTimeout(200); await page.evaluate(() => scrollTo(0, 0));
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'Narrow mobile has no horizontal overflow');
+  assert.ok(await page.locator('.masthead-intro').evaluate(el => el.closest('header') === document.querySelector('.masthead')), 'Artwork headline and strapline live in the header');
+  assert.equal(await page.locator('main .intro').count(), 0, 'No separate intro consumes space above the artwork');
   await page.screenshot({ path: resolve(results, 'mobile-landscape.png'), fullPage: true });
+  // A real mobile/touch context exposes tap-target and continuous-audio clear bugs
+  // that a desktop mouse click against a resized page cannot catch.
+  const touchContext = await browser.newContext({
+    viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true,
+    deviceScaleFactor: 2, acceptDownloads: true
+  });
+  try {
+    const mobilePage = await touchContext.newPage();
+    mobilePage.on('pageerror', error => errors.push('Mobile: ' + error.message));
+    await mobilePage.goto(url);
+    await mobilePage.waitForFunction(() => window.AlgoAnimate?.diagnostics().paths > 0
+      && !window.AlgoAnimate.diagnostics().building, null, { timeout: 20000 });
+    for (const width of [390, 360]) {
+      await mobilePage.setViewportSize({ width, height: 844 });
+      assert.ok(await mobilePage.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), width + 'px touch layout has no horizontal overflow');
+      const header = await mobilePage.evaluate(() => {
+        const masthead = document.querySelector('.masthead').getBoundingClientRect();
+        const brand = document.querySelector('.brand').getBoundingClientRect();
+        const title = document.querySelector('.masthead-intro').getBoundingClientRect();
+        const canvas = document.getElementById('art').getBoundingClientRect();
+        const source = document.getElementById('sources').getBoundingClientRect();
+        return { height: masthead.height, noOverlap: brand.right + 1 <= title.left,
+          titleInside: title.right <= masthead.right + 1, canvasTop: canvas.top, sourceTop: source.top };
+      });
+      assert.ok(header.noOverlap && header.titleInside, width + 'px header has no text overlap: ' + JSON.stringify(header));
+      assert.ok(header.height < 145, width + 'px compact header saves vertical space: ' + header.height);
+      if (!(await mobilePage.evaluate(() => window.AlgoAnimate.diagnostics().source))) {
+        await mobilePage.locator('#playDemo').tap();
+      }
+      await mobilePage.waitForFunction(() => window.AlgoAnimate.diagnostics().source === 'demo'
+        && window.AlgoAnimate.diagnostics().drawing.inkLength > 20, null, { timeout: 12000 });
+      const button = mobilePage.locator('#clearCanvas');
+      assert.ok(await button.evaluate(el => {
+        const b = el.getBoundingClientRect(), x = b.left + b.width / 2, y = b.top + b.height / 2;
+        return b.height >= 44 && b.width >= 90 && (document.elementFromPoint(x, y) === el
+          || el.contains(document.elementFromPoint(x, y)));
+      }), width + 'px clear target is a fully tappable button');
+      await button.tap();
+      await mobilePage.waitForFunction(() => window.AlgoAnimate.diagnostics().drawing.blank
+        && window.AlgoAnimate.diagnostics().drawing.layers === 0, null, { timeout: 3000 });
+      await mobilePage.waitForTimeout(250);
+      const blankState = await mobilePage.evaluate(() => ({
+        diagnostics: window.AlgoAnimate.diagnostics(), clearLabel: document.getElementById('clearCanvas').textContent,
+        canvas: document.getElementById('art').toDataURL()
+      }));
+      assert.equal(blankState.diagnostics.source, 'demo', 'Tapping Clear retains mobile demo audio');
+      assert.equal(blankState.diagnostics.drawing.inkLength, 0, 'Tapping Clear gives genuinely empty paper');
+      assert.equal(blankState.diagnostics.clearHold, true, 'Clean paper is held visually on mobile');
+      assert.ok(blankState.clearLabel.includes('cleared'), 'Touch gives visible acknowledgement');
+      await mobilePage.waitForFunction(() => !window.AlgoAnimate.diagnostics().clearHold
+        && window.AlgoAnimate.diagnostics().drawing.inkLength > 0, null, { timeout: 10000 });
+      await mobilePage.screenshot({ path: resolve(results, 'mobile-touch-' + width + '.png'), fullPage: true });
+    }
+  } finally {
+    await touchContext.close();
+  }
   assert.deepEqual(errors, [], 'No uncaught application errors');
-  const summary = { version: '0.08', desktop: 'passed', engines: 8, pens: 24, minimumMeasuredFPS: measuredFPS,
+  const summary = { version: '0.09', desktop: 'passed', engines: 8, pens: 24, minimumMeasuredFPS: measuredFPS,
     compositionDensity, audioFidelity,
     calibratedMeters, quietTreble, demoBandPeaks, meterSilenceAndSensitivity: 'passed',
     responsiveEngineMeters: 'passed', clearCanvasKeepsAudio: 'passed',

@@ -12,4 +12,46 @@ footer{display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px;margin
 @media(max-width:1190px){.masthead,main,footer{padding-left:28px;padding-right:28px}.studio{grid-template-columns:minmax(0,1fr) 300px;gap:20px}.desk-section{padding:19px}.engine-layers{grid-template-columns:repeat(2,minmax(0,1fr))}.record-bar{gap:10px 18px}.record-bar .check-label{margin-left:auto}.snapshot-button{margin-left:0}.record-meta{flex-wrap:wrap;gap:5px}.intro h1{font-size:49px}}
 @media(max-width:820px){.masthead,main,footer{padding-left:20px;padding-right:20px}.masthead{min-height:70px}.brand{font-size:25px;gap:10px}.phi{font-size:38px}.masthead-note{font-size:10px}.edition{font-size:9px}.intro{padding:16px 0;align-items:flex-start}.intro-note{font-size:12px}.intro h1{font-size:37px}.studio{display:flex;flex-direction:column;gap:22px}.desk{display:contents}.source-section{order:0;width:100%}.workspace{order:1;width:100%}.tuning-section{order:2;width:100%}.studio-stamp{order:3;width:100%;padding:0}.source-section .section-label,.source-section .section-note{max-width:100%}.source-section .source-main{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.source-section .source-button{display:flex;width:100%;margin:0}.source-section #chooseFile{margin-left:0}.source-section .source-pair{grid-template-columns:1fr 1fr}.source-summary{margin-top:5px}.source-help{margin-top:5px}.source-section{padding:18px}.section-label h2{font-size:27px}.section-note{margin:7px 0 13px}.engine-layers{grid-template-columns:repeat(4,minmax(0,1fr))}.intro .eyebrow{font-size:9px;letter-spacing:1px}.record-bar .check-label{margin-left:0}.snapshot-button{margin-left:auto}.stage{padding:16px}.tuning-section .select-pair{max-width:460px}.tuning-section .range-control{max-width:600px}footer{margin-top:20px}}
 @media(max-width:580px){.masthead,main,footer{padding-left:16px;padding-right:16px}.masthead{min-height:65px;gap:10px}.brand{font-size:22px;gap:9px}.phi{font-size:34px}.slash{margin:0 3px}.masthead-note a{display:none}.masthead-note .edition{font-size:9px;max-width:70px;text-align:right;line-height:1.5;letter-spacing:0}.intro{display:block;padding:11px 0}.intro h1{font-size:32px;letter-spacing:-.5px;margin-top:4px}.intro-note{text-align:left;margin-top:4px;font-size:12px}.intro-note br{display:none}.intro-note br:after{content:' '}.source-section .source-button{padding:10px 8px;gap:6px;font-size:12px}.source-button .button-icon{font-size:20px;width:18px}.source-button small{font-size:9px}.source-section .source-button>span:last-child{display:none}.source-section .section-label h2{font-size:25px}.source-summary button{font-size:10px}.source-help summary{min-height:38px}.source-pair button{font-size:12px}.studio{gap:20px}.stage{padding:10px}.stage-heading{font-size:9px}.stage-corner{font-size:7px;bottom:0;right:5px}.art-caption{font-size:9px;gap:5px}.art-caption .text-button{font-size:10px}.canvas-actions{gap:10px}.art-caption{column-gap:7px}.caption-divider{padding:0 2px}.recording-section{padding:13px 14px;margin-bottom:18px}.record-bar{gap:7px 14px}.record-row{justify-content:space-between;width:100%}.record-button,.stop-record-button{flex:1}.record-bar .check-label{font-size:11px;flex:1}.snapshot-button{font-size:11px;padding:10px 9px}.record-meta p{font-size:10px}.record-meta .format-badge{display:none}.signal-panel{padding:14px;margin-bottom:24px}.signal-heading span{font-size:8px}.signal-heading h2{font-size:14px}.signal-panel canvas{height:67px}.band-meters{gap:10px;font-size:8px;letter-spacing:.3px}.band-meters>div{gap:6px 4px}.band-meters output{font-size:8px}.meter-scale{font-size:8px}.beat span{display:none}.engine-layers{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.engine-row{padding:10px 11px}.engine-heading h2{font-size:26px}.engine-heading>span{font-size:8px}.engine-heading .eyebrow{font-size:9px}.engine-note{font-size:11px}.take{align-items:flex-start;flex-direction:column;gap:8px}.take-actions{justify-content:space-between;width:100%}.take strong{font-size:12px}.studio-stamp>span{font-size:45px}footer{flex-direction:column;gap:7px;padding-top:19px;padding-bottom:25px;font-size:10px}.stage.portrait .paper{max-width:100%}.tuning-section{padding:19px}}
+
+/* Compact identity + artist statement: one header instead of a second intro row. */
+.masthead{display:grid;grid-template-columns:max-content minmax(0,1fr) max-content;column-gap:clamp(20px,3.5vw,52px);align-items:center;padding-top:11px;padding-bottom:11px;min-height:88px}
+.brand{font-size:23px;gap:9px;align-self:center}.brand .phi{font-size:35px}
+.masthead-intro{min-width:0;display:flex;flex-direction:column;justify-content:center;gap:2px}
+.masthead-intro .eyebrow{font-size:9px;letter-spacing:1px;line-height:1.25}
+.masthead-intro h1{font-size:31px;line-height:1.1;letter-spacing:-.35px;margin:1px 0 0}
+.masthead-intro .intro-note{font-size:11px;line-height:1.35;text-align:left}
+.masthead-note{white-space:nowrap}
+.canvas-actions #clearCanvas{border:1px solid var(--line);border-radius:5px;background:var(--card);padding:8px 13px;text-decoration:none;font-weight:650;min-height:44px}
+.canvas-actions #clearCanvas:hover{border-color:var(--ink);background:#e6e2d7;color:var(--ink)}
+@media(max-width:1100px){
+  .masthead{column-gap:18px}
+  .brand{font-size:20px;gap:8px}.brand .phi{font-size:31px}
+  .masthead-intro h1{font-size:27px}
+  .masthead-intro .intro-note span{display:none}
+}
+@media(max-width:820px){
+  .masthead{grid-template-columns:max-content minmax(0,1fr);column-gap:20px;min-height:82px}
+  .masthead-note{display:none}
+  .brand{font-size:20px;gap:8px}.brand .phi{font-size:30px}
+  .masthead-intro h1{font-size:26px}
+  .masthead-intro .intro-note span{display:inline}
+}
+@media(max-width:580px){
+  .masthead{grid-template-columns:max-content minmax(0,1fr);column-gap:12px;min-height:0;padding-top:11px;padding-bottom:11px;align-items:center}
+  .brand{font-size:17px;gap:6px}.brand .phi{font-size:27px}.slash{margin:0 2px}
+  .masthead-intro{gap:3px}
+  .masthead-intro .eyebrow{font-size:8px;letter-spacing:.2px;line-height:1.15}
+  .masthead-intro h1{font-size:22px;line-height:1.05;margin:0;letter-spacing:-.25px}
+  .masthead-intro .intro-note{font-size:9px;line-height:1.25}
+  .masthead-intro .intro-note span{display:none}
+  .art-caption .canvas-actions{width:100%;margin-left:0;justify-content:flex-end;gap:12px}
+  .art-caption .canvas-actions .text-button{font-size:11px;min-height:44px}
+  .canvas-actions #clearCanvas{padding:8px 12px}
+}
+@media(max-width:380px){
+  .brand{font-size:15px}.brand .phi{font-size:25px}
+  .masthead{column-gap:9px}
+  .masthead-intro h1{font-size:20px}
+}
+
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;scroll-behavior:auto!important}}
