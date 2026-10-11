@@ -367,6 +367,8 @@ try {
   assert.ok(await page.evaluate(() => document.querySelector('.brand').getBoundingClientRect().right <= innerWidth - 12), 'Mobile branding fits');
   await page.screenshot({ path: resolve(results, 'mobile-portrait.png'), fullPage: true });
   await select('orientation', 'landscape');
+  await page.waitForFunction(() => window.AlgoAnimate.diagnostics().drawing.inkLength > 0);
+  assert.equal((await state()).drawing.flowing, false, 'Changing paper preserves the held drawing without restarting audio');
   await page.setViewportSize({ width: 360, height: 800 });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'Narrow mobile has no horizontal overflow');
   await page.screenshot({ path: resolve(results, 'mobile-landscape.png'), fullPage: true });

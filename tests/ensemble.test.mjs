@@ -86,6 +86,18 @@ test('switching sound sources invalidates old worker targets without clearing pa
   assert.deepEqual(art.voices.map(voice => voice.art.stats.progress), progress);
 });
 
+test('paper and ink changes preserve each quiet engine pen position', () => {
+  const { art } = fixture();
+  art.updateSignals(full, 0.35, true); art.draw(0.35, 0.6, false, 4);
+  art.updateSignals(SILENCE, 0.03, false); art.draw(0.03, 0.6, false, 4);
+  const positions = art.voices.map(voice => voice.art.activeLayer.age);
+  art.setScenes(art.voices.map(voice => ({ ...voice.art.current, width: 700, height: 1000 })), true);
+  art.draw(0.03, 0.6, false, 4);
+  assert.deepEqual(art.voices.map(voice => voice.art.activeLayer.age), positions);
+  assert.ok(art.diagnostics().every(voice => voice.inkLength > 0 && !voice.flowing));
+  assert.equal(art.canvas.width, 700); assert.equal(art.canvas.height, 1000);
+});
+
 test('all eight engines draw on one paper with 24 independent pen lanes and bounded history', () => {
   const { art, commands } = fixture();
   for (let i = 0; i < 150; i++) {

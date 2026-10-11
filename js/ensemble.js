@@ -88,10 +88,13 @@ export class LayeredArtwork {
     this.paperScene = scenes[0];
     for (let index = 0; index < this.voices.length; index++) {
       const art = this.voices[index].art;
+      const progress = art.activeLayer?.age || 0;
       art.setScene(scenes[index], immediate);
       // A layer that has never heard its assigned signal waits with empty ink.
       // Do not render eight unrelated ready-state posters over the audio art.
-      if (!art.layers.length) art.layers = [art.layer(art.current)];
+      // Explicit paper/ink controls rebuild at the held pen position, so an
+      // orientation change during silence does not replace the art with blank paper.
+      if (!art.layers.length) art.layers = [art.layer(art.current, progress)];
     }
   }
   updateSignals(features, dt, available) {
