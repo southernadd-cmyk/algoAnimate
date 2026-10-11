@@ -22,7 +22,15 @@ export class VideoRecorder {
     if (this.busy) return;
     const audioTrack = audio.getAudioTracks().find(track => track.readyState === 'live');
     if (!audioTrack) throw new Error('No live audio track is available to record. Reconnect an audio source.');
-    const video = canvas.captureStream(30);
+    let video = canvas.captureStream(0);
+    let videoTrack = video.getVideoTracks()[0];
+    // Automatic canvas capture is coupled to browser painting. Explicitly
+    // request each painted frame so a background recording keeps its cadence.
+    if (!videoTrack?.requestFrame) {
+      video.getTracks().forEach(track => track.stop());
+      video = canvas.captureStream(30); videoTrack = video.getVideoTracks()[0];
+    }
+    this.videoTrack = videoTrack;
     this.stream = new MediaStream([...video.getVideoTracks(), audioTrack.clone()]);
     try {
       this.recorder = new MediaRecorder(this.stream, {
@@ -38,6 +46,7 @@ export class VideoRecorder {
       this.recorder.onstop = () => this.finish();
       this.recordingError = null;
       this.recorder.start(1000);
+      this.captureFrame();
       this.limit = setTimeout(() => this.stop(), MAX_TAKE_SECONDS * 1000);
       this.onChange();
     } catch (error) {
@@ -45,6 +54,7 @@ export class VideoRecorder {
       throw error;
     }
   }
+  captureFrame() { if (this.active) this.videoTrack?.requestFrame?.(); }
   stop() {
     if (this.stopping) return this.stopping;
     if (!this.active) return Promise.resolve(this.result);
@@ -70,5 +80,5 @@ export class VideoRecorder {
     this.resolveStop = null; this.stopping = null; this.finishing = false;
     resolve?.(this.result); this.onChange();
   }
-  releaseTracks() { this.stream?.getTracks().forEach(track => track.stop()); this.stream = null; }
+  releaseTracks() { this.stream?.getTracks().forEach(track => track.stop()); this.stream = null; this.videoTrack = null; }
 }

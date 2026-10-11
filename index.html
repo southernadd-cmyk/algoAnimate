@@ -22,7 +22,7 @@
       <h1>Sound, in living ink.</h1>
       <p class="intro-note">One sound. Eight voices. 24 pens. <span>Every drawing finds a new colour.</span></p>
     </div>
-    <div class="masthead-note"><span class="edition">v0.10 · LIVE DRAWING STUDIO</span><a href="https://southernadd-cmyk.github.io/algoart/" target="_blank" rel="noopener">From ALGO / ART ↗</a></div>
+    <div class="masthead-note"><span class="edition">v0.11 · LIVE DRAWING STUDIO</span><a href="https://southernadd-cmyk.github.io/algoart/" target="_blank" rel="noopener">From ALGO / ART ↗</a></div>
   </header>
   <main>
     <div class="studio">
@@ -67,7 +67,7 @@
           <p class="section-note">Eight engines listen to different parts of the same sound. Tune the feel of their marks.</p>
           <div class="select-pair"><div><label class="select-label" for="orientation">Paper</label><select id="orientation"><option value="landscape">Landscape</option><option value="portrait">Portrait</option></select></div><div><label class="select-label" for="palette">Colour mood</label><select id="palette"><option value="mix">Original ink</option><option value="soft">Soft &amp; muted</option><option value="bold">Deep &amp; bold</option></select></div></div>
           <div class="range-control"><label for="density">Composition density</label><output for="density" id="densityValue">25%</output><input type="range" id="density" min="0" max="100" value="25"><div class="range-note"><span>More space</span><span>More marks</span></div></div>
-          <div class="range-control"><label for="evolution">Drawing cycle</label><output for="evolution" id="evolutionValue">~4.0s</output><input type="range" id="evolution" min="0" max="100" value="50"><div class="range-note"><span>Slow pen</span><span>Quick pen</span></div></div>
+          <div class="range-control"><label for="evolution">Drawing cycle</label><output for="evolution" id="evolutionValue">~5.0s</output><input type="range" id="evolution" min="0" max="100" value="33"><div class="range-note"><span>Slow pen</span><span>Quick pen</span></div></div>
           <details class="advanced-controls" id="tuningDetails"><summary>Audio &amp; motion</summary>
             <div class="range-control"><label for="sensitivity">Audio sensitivity</label><output for="sensitivity" id="sensitivityValue">100%</output><input type="range" id="sensitivity" min="25" max="300" value="100" step="5"><div class="range-note"><span>Quiet source</span><span>Stronger response</span></div></div>
             <div class="range-control"><label for="motion">Pen response</label><output for="motion" id="motionValue">60%</output><input type="range" id="motion" min="0" max="100" value="60"><div class="range-note"><span>Even pressure</span><span>Sound-driven</span></div></div>
@@ -80,7 +80,7 @@
       </aside>
     </div>
   </main>
-  <footer><span>ALGO / ANIMATE <span class="footer-dot">·</span> v0.10</span><span>Sound stays in your browser. No account. No uploads.</span><a href="https://github.com/southernadd-cmyk/algoAnimate" target="_blank" rel="noopener">Source on GitHub ↗</a></footer>
+  <footer><span>ALGO / ANIMATE <span class="footer-dot">·</span> v0.11</span><span>Sound stays in your browser. No account. No uploads.</span><a href="https://github.com/southernadd-cmyk/algoAnimate" target="_blank" rel="noopener">Source on GitHub ↗</a></footer>
   <dialog id="previewDialog"><div class="dialog-heading"><h2>Your recorded take</h2><button type="button" id="closePreview" aria-label="Close recording preview">✕</button></div><video id="recordingPreview" controls playsinline></video></dialog>
   <script src="./vendor/algoart/phi.js"></script>
   <script src="./vendor/algoart/random.js"></script>

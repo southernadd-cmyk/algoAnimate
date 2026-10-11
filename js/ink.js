@@ -120,12 +120,34 @@ export function prepareSceneGeometry(scene) {
   const paths = scene.paths.map(entry => ({
     ...entry, geometry: markerGeometry(entry.d), ...pathBounds(entry.d)
   }));
-  return { ...scene, paths, schedule: strokeSchedule(paths), geometryPrepared: true };
+  const schedule = strokeSchedule(paths);
+  if (scene.markHierarchy) {
+    // Choose one native gesture as the leading motif. Its overdraw passes
+    // share the emphasis; frames and supporting rectangles never become leads.
+    let lead = null, score = 0;
+    for (const entry of paths) {
+      if (entry.role !== 'gesture' || entry.motif === undefined) continue;
+      const weight = entry.extent * (entry.geometry.segments.some(segment => segment.type === 'C') ? 1.3 : 1);
+      if (weight > score) { lead = entry.motif; score = weight; }
+    }
+    for (let i = 0; i < paths.length; i++) if (paths[i].motif === lead) {
+      paths[i].accent = true;
+      paths[i].width *= 1.28;
+      paths[i].opacity = Math.min(0.95, paths[i].opacity * 1.28);
+      // Let the whole leading stroke become legible, remain briefly, then
+      // recede by arc length. Other ink retains the sparse rolling window.
+      schedule[i].complete = true; schedule[i].hold = 0.12;
+    }
+  }
+  const motifMemory = Math.max(0, ...schedule.filter(timing => timing.complete)
+    .map(timing => timing.duration + timing.hold));
+  return { ...scene, paths, schedule, motifMemory, geometryPrepared: true };
 }
 
 export function inkWindow(age, timing, memory = 0.7) {
+  const retention = timing.complete ? Math.max(memory, timing.duration + (timing.hold || 0)) : memory;
   return {
-    from: clamp((age - timing.start - memory) / timing.duration),
+    from: clamp((age - timing.start - retention) / timing.duration),
     to: clamp((age - timing.start) / timing.duration)
   };
 }

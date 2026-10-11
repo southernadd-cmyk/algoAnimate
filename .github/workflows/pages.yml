@@ -28,11 +28,13 @@ jobs:
         run: command -v ffprobe || (sudo apt-get update && sudo apt-get install -y ffmpeg)
       - name: Browser, audio and recording smoke test
         run: npm run test:browser
+      - name: First ink and background recording clock
+        run: HEADED=1 xvfb-run -a npm run test:clock
       - name: Keep screenshots and test take
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: v0.07-smoke-test
+          name: v0.11-smoke-test
           path: test-results/
           if-no-files-found: ignore
   deploy:

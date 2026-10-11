@@ -55,6 +55,11 @@ export function ensembleSettings(route, seed, orientation, palette, density = 25
     complexity: 12 + 34 * amount, recursion: Math.round(1 + 2 * amount),
     negativeSpace: 92 - 48 * amount, nesting: 6 + 42 * amount,
     overlap: 8 + 47 * amount, inkMemory: 0.12 + 0.58 * amount,
+    // Supporting frames get a bounded mark budget. Expressive voices unfold
+    // in longer phrases; each still reads only its own assigned sound inputs.
+    markHierarchy: true, rectangleBudget: Math.round(2 + 4 * amount),
+    rectangles: route.id === 'rects' || route.id === 'geometric',
+    phraseScale: ['field', 'organic', 'scribble', 'spiral'].includes(route.id) ? 1.4 : 1,
     overdraw: 2, grain: 9, ...styleSettings(style) };
 }
 

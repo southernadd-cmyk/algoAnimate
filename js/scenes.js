@@ -1,5 +1,6 @@
 import { clamp } from './features.js';
 import { prepareSceneGeometry, strokeWindow, inkWindow } from './ink.js';
+import { renderComposition } from './composition.js';
 export { pathBounds } from './ink.js';
 
 export const DEFAULT_SETTINGS = Object.freeze({
@@ -45,8 +46,8 @@ export class SceneBuilder {
     A.rendererVersion = 7;
     A.svgRecorder = { precise: true, paths: [], paperMarks: [] };
     try {
-      A.render(canvas, settings, 0.5);
-      return { ...A.svgRecorder, seed: settings.seed, mode: settings.mode, style: settings.style, inkMemory: settings.inkMemory, width: A.W, height: A.H, paper: settings.paper };
+      renderComposition(A, canvas, settings);
+      return prepareSceneGeometry({ ...A.svgRecorder, seed: settings.seed, mode: settings.mode, style: settings.style, inkMemory: settings.inkMemory, markHierarchy: settings.markHierarchy, phraseScale: settings.phraseScale, width: A.W, height: A.H, paper: settings.paper });
     } finally { A.svgRecorder = null; }
   }
   build(settings) {
@@ -79,9 +80,10 @@ export class AnimatedArtwork {
   get drawnSeed() { return this.activeLayer?.scene.seed || this.current?.seed; }
   get drawnMode() { return this.activeLayer?.scene.mode || this.current?.mode; }
   get drawnStyle() { return this.activeLayer?.scene.style || this.current?.style; }
+  cycleDuration(cycle) { return cycle * (this.current?.phraseScale || 1); }
   needsScene(cycle, gentle = false) {
     if (this.queued || !this.activeLayer) return false;
-    const remainingSeconds = (1 - this.activeLayer.age) * cycle * (gentle ? 1.6 : 1) / this.speed;
+    const remainingSeconds = (1 - this.activeLayer.age) * this.cycleDuration(cycle) * (gentle ? 1.6 : 1) / this.speed;
     return remainingSeconds <= 0.2;
   }
   discardQueued() {
@@ -137,7 +139,7 @@ export class AnimatedArtwork {
       }
       const targetSpeed = 1 + response * (features.level * 0.55 + features.mid * 0.2 + features.flux * 0.35);
       this.speed += (targetSpeed - this.speed) * (1 - Math.exp(-dt / 0.2));
-      const advance = dt * this.speed / Math.max(0.5, cycle * (gentle ? 1.6 : 1));
+      const advance = dt * this.speed / Math.max(0.5, this.cycleDuration(cycle) * (gentle ? 1.6 : 1));
       for (const layer of this.layers) layer.age += advance;
       if (this.queued) this.queuedSeconds += dt;
       while (this.activeLayer.age >= 1) {
@@ -147,7 +149,8 @@ export class AnimatedArtwork {
       // A slow worker or a settings change must not sit behind a full old
       // cycle. Existing strokes finish on their own ink layer during handoff.
       if (this.queued && this.queuedSeconds >= 0.2) this.beginCycle(this.queued);
-      this.layers = this.layers.filter(layer => layer.age < (layer.preview ? 1 / 1.6 : 1 + memory));
+      this.layers = this.layers.filter(layer => layer.age < (layer.preview ? 1 / 1.6 : 1 +
+        Math.max(memory, layer.scene.motifMemory || 0)));
     }
     const ctx = this.context, scene = this.activeLayer?.scene || this.current;
     ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;

@@ -4,17 +4,20 @@ importScripts('../vendor/algoart/phi.js', '../vendor/algoart/random.js',
   '../vendor/algoart/palettes.js', './ink-palette.js', '../vendor/algoart/marker.js', '../vendor/algoart/generator.js');
 
 const geometryModule = import('./ink.js');
+const compositionModule = import('./composition.js');
 
 self.onmessage = async ({ data: { id, settings } }) => {
   try {
+    // Await module loading before touching the renderer's shared recorder:
+    // several initial scene requests can arrive while imports are pending.
+    const [{ prepareSceneGeometry }, { renderComposition }] = await Promise.all([geometryModule, compositionModule]);
     const canvas = new OffscreenCanvas(1, 1);
     const A = self.AlgoArt;
     A.rendererVersion = 7;
     A.svgRecorder = { precise: true, paths: [], paperMarks: [] };
-    A.render(canvas, settings, 0.5);
-    const scene = { ...A.svgRecorder, seed: settings.seed, mode: settings.mode, style: settings.style, inkMemory: settings.inkMemory, width: A.W, height: A.H, paper: settings.paper };
+    renderComposition(A, canvas, settings);
+    const scene = { ...A.svgRecorder, seed: settings.seed, mode: settings.mode, style: settings.style, inkMemory: settings.inkMemory, markHierarchy: settings.markHierarchy, phraseScale: settings.phraseScale, width: A.W, height: A.H, paper: settings.paper };
     A.svgRecorder = null;
-    const { prepareSceneGeometry } = await geometryModule;
     self.postMessage({ id, scene: prepareSceneGeometry(scene) });
   } catch (error) {
     self.AlgoArt.svgRecorder = null;

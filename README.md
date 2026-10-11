@@ -1,4 +1,4 @@
-# ALGO / ANIMATE — v0.10
+# ALGO / ANIMATE — v0.11
 
 **Sound, in living ink.** A browser-only audio experiment using the golden ratio
 and ALGO / ART's expressive marker renderer.
@@ -20,8 +20,10 @@ and ALGO / ART's expressive marker renderer.
    contain the artwork and sound; optionally include the waveform. A take stops
    automatically after three minutes. **Save frame** exports a PNG.
 
-Keep the animation tab visible while recording. Files and recordings remain on
-your device; the application does not upload sound or require an account.
+Recording uses a dedicated worker clock and explicitly captures each painted
+frame, so switching to the sound tab does not depend on the preview's animation
+callbacks. Files and recordings remain on your device; the application does not
+upload sound or require an account.
 
 ## Browser support
 
@@ -84,6 +86,15 @@ its actual container. The canvas shape is preserved (1400 × 1000 landscape or
   detail, recursion, nesting and overlap, requests more negative space and shortens
   the visible ink history. All eight engines still draw; density does not simply
   make their ink more transparent. Native engine minimum geometry is retained.
+- An animation adapter gives rectangles a supporting role: their count is
+  bounded, their ink is thinner and quieter, and enclosing page frames appear
+  occasionally rather than on every recursive drawing. Expressive engines use
+  lines, curves, circles, arcs and polygons. A chosen native gesture receives a
+  stronger accent, completes its stroke, holds briefly, then recedes by arc
+  length. Supporting ink keeps the sparse rolling window. Orbital Studies,
+  Growth Systems, Automatic Marks and Golden Trajectories unfold over longer
+  phrases. The default base cycle is about five seconds; the pace control still
+  allows quick drawing. Every engine retains its assigned sound input.
 - Ink stays in place after it is drawn. Older strokes recede from their start
   while fresh ink grows from the pen tips, so the paper keeps changing without
   whole-image holds or crossfades while sound is present. A fresh composition with the current sound-derived seed and a new ink kit
@@ -128,7 +139,7 @@ pixels. The public palette hook is adapted in `js/ink-palette.js`, in both the
 worker and fallback renderer; no vendor source is modified.
 
 Live capture timing, noise, sample rates and browser FFT behaviour can differ,
-so v0.07 does not promise bit-identical videos across devices or mathematical
+so v0.11 does not promise bit-identical videos across devices or mathematical
 uniqueness for every possible sound. Frame rate targets 30 FPS and
 depends on the device, engine and number of marks. This is a prototype.
 
@@ -157,6 +168,9 @@ Node.js 22 or later:
 ```sh
 npm run check
 npm test
+npm run test:browser
+# A desktop display is needed to check actual background-tab behaviour:
+HEADED=1 xvfb-run -a npm run test:clock
 ```
 
 GitHub Actions also runs a Chromium smoke test covering all eight composition
@@ -174,4 +188,7 @@ all eight engines drawing at minimum density, waveform export, source
 cleanup, permission errors, audio-file replay, portrait rendering and mobile
 layout. It inspects the exported video with `ffprobe`, saves screenshots and a
 sample take as workflow artifacts, then deploys only after those checks pass.
+An additional headed Chromium test checks first ink while animation callbacks
+are stopped, then records with the artwork in a real background tab for over a
+minute. It checks actual video frame timestamps and changing artwork pixels.
 Physical microphone and real tab-share permission dialogs need manual testing.

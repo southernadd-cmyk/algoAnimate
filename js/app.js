@@ -5,6 +5,7 @@ import { LayeredArtwork, ensembleSettings } from './ensemble.js';
 import { VideoRecorder, MAX_TAKE_SECONDS } from './recording.js';
 import { StyleDeck, styleSettings } from './styles.js';
 import { BandMeters, BAND_KEYS, meterLevel } from './meters.js';
+import { FrameClock } from './frame-clock.js';
 
 const $ = id => document.getElementById(id);
 const art = $('art'), waveform = $('waveform'), player = $('filePlayer');
@@ -64,6 +65,7 @@ const recorder = new VideoRecorder({
 const audio = new AudioInput({ onEnded: () => disconnect(true) });
 
 function syncControls() {
+  frameClock.setRecording(recorder.active);
   const locked = pending || recorder.busy || startRecordPending;
   $('connectTab').disabled = locked || !navigator.mediaDevices?.getDisplayMedia;
   $('connectMic').disabled = locked || !navigator.mediaDevices?.getUserMedia;
@@ -81,7 +83,7 @@ function syncControls() {
   document.querySelector('.recording-section').classList.toggle('is-recording', recorder.busy);
   $('recordingFormat').textContent = recorder.mimeType ? (recorder.mimeType.includes('mp4') ? 'MP4 / 30 FPS' : 'WEBM / 30 FPS') : 'UNAVAILABLE';
   $('recordHint').textContent = recorder.stopping ? 'Finishing your video…'
-    : recorder.active ? 'Recording artwork + sound. Keep this tab visible. Stops at 03:00.'
+    : recorder.active ? 'Recording artwork + sound. You can control your sound tab. Stops at 03:00.'
       : !recorder.mimeType ? 'Video recording is unavailable here. You can still save a PNG.'
         : audio.kind ? 'Records artwork + sound. Up to 3 minutes per take.' : 'Connect sound to record. Up to 3 minutes per take.';
   $('sourceName').textContent = pending ? 'Connecting…' : audio.kind ? sourceLabel || names[audio.kind] || 'Audio file' : 'No audio connected';
@@ -372,8 +374,7 @@ function updateUI(now) {
 }
 
 function frame(now) {
-  requestAnimationFrame(frame);
-  if (previousFrame && now - previousFrame < 1000 / 30 - 1) return;
+  if (previousFrame && now - previousFrame < 1000 / 30 - (recorder.active ? 4 : 1)) return;
   const dt = previousFrame ? clamp((now - previousFrame) / 1000, 0.001, 0.12) : 1 / 30;
   previousFrame = now; clock += dt;
   const data = audio.read();
@@ -400,20 +401,17 @@ function frame(now) {
   }
   artwork.draw(dt, +$('motion').value / 100, $('gentle').checked, cycle);
   drawWaveform(data?.wave);
-  if (recorder.busy) paintRecording();
+  if (recorder.active) { paintRecording(); recorder.captureFrame(); }
   frames++;
   if (now - fpsStart > 1000) { fps = Math.round(frames * 1000 / (now - fpsStart)); frames = 0; fpsStart = now; }
   if (now - uiTime > 100) { updateUI(now); uiTime = now; }
 }
 
-document.addEventListener('visibilitychange', () => {
-  if (document.hidden && recorder.active) message('Keep the animation tab visible while recording so the video continues smoothly.');
-});
-window.addEventListener('pagehide', () => { if (recorder.active) recorder.stop(); audio.stop(); });
+window.addEventListener('pagehide', () => { if (recorder.active) recorder.stop(); frameClock.stop(); audio.stop(); });
 
 // Small read-only diagnostics surface for smoke tests and bug reports.
 window.AlgoAnimate = Object.freeze({
-  version: '0.10',
+  version: '0.11',
   diagnostics: () => ({
     source: audio.kind, audio: audio.diagnostics(), seed: artwork.drawnSeed, engine: 'ensemble',
     engines: artwork.diagnostics(), compositions: artwork.sceneCount,
@@ -422,6 +420,7 @@ window.AlgoAnimate = Object.freeze({
       mid: features.mid, treble: features.treble, rms: features.rms, active: features.active },
     bandMeters: { scale: [-60, 0], ...bandMeters.bands },
     recording: recorder.active, recordingBusy: recorder.busy,
+    recordingClock: frameClock.mode,
     clearHold: performance.now() < clearHoldUntil,
     introduction: { elapsed: artwork.entrySeconds, finished: artwork.entryFinished },
     recordedBytes: recorder.result?.blob.size || 0, recordingType: recorder.result?.type || recorder.mimeType,
@@ -430,5 +429,6 @@ window.AlgoAnimate = Object.freeze({
     fps, maxTakeSeconds: MAX_TAKE_SECONDS
   })
 });
+const frameClock = new FrameClock(frame);
 syncControls(); drawWaveform(null); generateAll(true);
-requestAnimationFrame(frame);
+frameClock.start();
