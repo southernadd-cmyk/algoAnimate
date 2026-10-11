@@ -26,10 +26,10 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Ensure video inspection tools
         run: command -v ffprobe || (sudo apt-get update && sudo apt-get install -y ffmpeg)
-      - name: Browser, audio and recording smoke test
-        run: npm run test:browser
       - name: First ink and background recording clock
         run: HEADED=1 xvfb-run -a npm run test:clock
+      - name: Browser, audio and recording smoke test
+        run: npm run test:browser
       - name: Keep screenshots and test take
         if: always()
         uses: actions/upload-artifact@v4

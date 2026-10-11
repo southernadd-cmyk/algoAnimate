@@ -440,6 +440,11 @@ try {
   await setCapturedBands({ mid: 0.2 }); await page.waitForTimeout(350);
   console.log('Real bass/mid/treble tones are calibrated equally; meters respond to actual amplitude and treble reaches its drawing engine.');
   await setRange('evolution', 100); await page.waitForTimeout(2400);
+  // The signature covers an ordered window of 16 actual audio observations.
+  // Wait for that window to contain only the steady tone, rather than assuming
+  // a wall-clock delay guarantees enough observations on a busy CI machine.
+  await page.waitForFunction(() => window.AlgoAnimate.diagnostics().engines
+    .find(engine => engine.engine === 'rects').seedWindow.steady, null, { timeout: 15000 });
   const steadyKits = [];
   for (let frame = 0; frame < 16; frame++) {
     await page.waitForTimeout(100);

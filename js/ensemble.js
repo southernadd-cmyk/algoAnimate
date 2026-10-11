@@ -163,6 +163,8 @@ export class LayeredArtwork {
     return this.voices.map(({ route, art, sound, flowing, building }) => ({
       engine: route.id, inputs: route.inputs, seed: art.drawnSeed,
       measuredSeed: sound.seed, queuedSeed: art.queued?.seed || null,
+      seedWindow: { samples: sound.seeds.history.length, steady: sound.seeds.history.length === 16
+        && sound.seeds.history.every(value => value === sound.seeds.history[0]) },
       signal: sound.features.level, active: sound.features.active, flowing, building,
       paths: art.current?.paths.length || 0, compositions: art.sceneCount,
       progress: art.stats.progress, penTips: art.stats.penTips,

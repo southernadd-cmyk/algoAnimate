@@ -71,6 +71,32 @@ try {
 
   await page.selectOption('#orientation', 'landscape');
   await wait(() => window.AlgoAnimate.diagnostics().dimensions[0] === 1400 && !window.AlgoAnimate.diagnostics().building);
+  // Model tab capture without audible playback from the animation page. A
+  // locally playing demo could exempt its timers from background throttling.
+  await page.evaluate(async () => {
+    const audio = new AudioContext(), destination = audio.createMediaStreamDestination();
+    const gain = audio.createGain(); gain.connect(destination);
+    for (const hz of [110, 880, 6000]) {
+      const oscillator = audio.createOscillator(); oscillator.frequency.value = hz;
+      oscillator.connect(gain); oscillator.start();
+    }
+    const now = audio.currentTime;
+    gain.gain.setValueAtTime(0.07, now);
+    for (let beat = 0; beat < 400; beat++) {
+      const time = now + 0.03 + beat * 0.22;
+      gain.gain.setValueAtTime(0.07, time);
+      gain.gain.linearRampToValueAtTime(0.2, time + 0.025);
+      gain.gain.exponentialRampToValueAtTime(0.07, time + 0.2);
+    }
+    await audio.resume();
+    const canvas = document.createElement('canvas'); canvas.width = canvas.height = 10;
+    canvas.getContext('2d').fillRect(0, 0, 10, 10);
+    const stream = new MediaStream([...destination.stream.getAudioTracks(), ...canvas.captureStream(1).getVideoTracks()]);
+    navigator.mediaDevices.getDisplayMedia = async () => stream;
+    window.backgroundCapture = { audio, stream };
+  });
+  await page.click('#connectTab'); await wait(() => window.AlgoAnimate.diagnostics().source === 'tab');
+  assert.equal((await state()).audio.recordingPath, 'direct-capture');
   await page.click('#record'); await wait(() => window.AlgoAnimate.diagnostics().recording);
   const controls = await context.newPage(); await controls.goto('about:blank'); await controls.bringToFront();
   if (process.env.HEADED === '1') await wait(() => document.hidden);
