@@ -18,6 +18,7 @@ const server = createServer(async (req, res) => {
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const browser = await chromium.launch({ headless: process.env.HEADED !== '1',
+  ignoreDefaultArgs: ['--disable-background-timer-throttling', '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding'],
   args: ['--autoplay-policy=no-user-gesture-required'] });
 const context = await browser.newContext({ acceptDownloads: true });
 const page = await context.newPage(), errors = [];
@@ -98,6 +99,10 @@ try {
   await page.click('#connectTab'); await wait(() => window.AlgoAnimate.diagnostics().source === 'tab');
   assert.equal((await state()).audio.recordingPath, 'direct-capture');
   await page.click('#record'); await wait(() => window.AlgoAnimate.diagnostics().recording);
+  // Playwright normally forces every page to look focused and visible. Disable
+  // that emulation so selecting the other tab changes real browser visibility.
+  const session = await context.newCDPSession(page);
+  await session.send('Emulation.setFocusEmulationEnabled', { enabled: false });
   const controls = await context.newPage(); await controls.goto('about:blank'); await controls.bringToFront();
   if (process.env.HEADED === '1') await wait(() => document.hidden);
   // Continue past Chrome's one-minute background timer threshold. Splitting
