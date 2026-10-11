@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { readFile, mkdir, writeFile, mkdtemp, rm } from 'node:fs/promises';
+import { readFile, mkdir, writeFile, mkdtemp, rm, readdir, rename } from 'node:fs/promises';
 import { resolve, extname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync, spawn } from 'node:child_process';
@@ -46,8 +46,18 @@ const wait = predicate => page.waitForFunction(predicate, null, { polling: 100, 
 const state = () => page.evaluate(() => window.AlgoAnimate.diagnostics());
 
 async function saveTake(name) {
-  const path = resolve(results, name + '.webm'), download = page.waitForEvent('download');
-  await page.click('#download'); await (await download).saveAs(path);
+  const path = resolve(results, name + '.webm'), before = new Set(await readdir(results));
+  // With noDefaults the browser owns its downloads, so wait for its finished
+  // GUID-named file rather than Playwright's managed-download event.
+  await page.click('#download');
+  let downloaded;
+  const deadline = Date.now() + 20000;
+  while (!downloaded && Date.now() < deadline) {
+    downloaded = (await readdir(results)).find(file => !before.has(file) && /^[0-9a-f-]{36}$/.test(file));
+    if (!downloaded) await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  assert.ok(downloaded, 'The Download video button saves a completed recording');
+  await rename(resolve(results, downloaded), path);
   const probe = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0',
     '-show_entries', 'frame=best_effort_timestamp_time:stream=width,height', '-of', 'json', path], { maxBuffer: 8 * 1024 * 1024 }));
   const times = probe.frames.map(frame => +frame.best_effort_timestamp_time);
