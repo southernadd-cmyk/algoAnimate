@@ -43,7 +43,8 @@ page.on('request', request => { if (request.url().endsWith('.mp3')) musicRequest
 const state = () => page.evaluate(() => window.AlgoAnimate.diagnostics());
 const musicReady = title => page.waitForFunction(title => {
   const d = window.AlgoAnimate.diagnostics();
-  return d.demo?.title === title && !d.demo.paused && d.features.active && d.drawing.inkLength > 0;
+  return d.demo?.title === title && !d.demo.paused && d.features.active && d.drawing.inkLength > 0
+    && document.getElementById('playDemo').getAttribute('aria-busy') === 'false';
 }, title, { timeout: 15000 });
 try {
   await page.goto(`http://127.0.0.1:${server.address().port}/`);
