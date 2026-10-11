@@ -3,6 +3,7 @@ import { FeatureTracker, SoundGate, SILENCE, clamp, evolutionInterval } from './
 import { SceneBuilder, DEFAULT_SETTINGS } from './scenes.js';
 import { LayeredArtwork, ensembleSettings } from './ensemble.js';
 import { VideoRecorder, MAX_TAKE_SECONDS } from './recording.js';
+import { StyleDeck, styleSettings } from './styles.js';
 
 const $ = id => document.getElementById(id);
 const art = $('art'), waveform = $('waveform'), player = $('filePlayer');
@@ -10,6 +11,7 @@ const waveContext = waveform.getContext('2d');
 const recordingCanvas = document.createElement('canvas');
 const recordingContext = recordingCanvas.getContext('2d', { alpha: false });
 const artwork = new LayeredArtwork(art), builder = new SceneBuilder();
+const styleDeck = new StyleDeck();
 const tracker = new FeatureTracker();
 const soundGate = new SoundGate();
 let features = SILENCE, pending = false, fileURL = null, fileLabel = '', sourceLabel = '';
@@ -21,12 +23,23 @@ const waveHistory = [];
 const names = { tab: 'Browser tab audio', microphone: 'Microphone', demo: 'Demo · 108 BPM' };
 const layerControls = artwork.voices.map(({ route }) => {
   const row = document.createElement('div'); row.className = 'engine-row'; row.dataset.engine = route.id;
+  const heading = document.createElement('div'); heading.className = 'engine-title';
   const title = document.createElement('strong'); title.textContent = route.name;
+  const state = document.createElement('span'); state.className = 'engine-state'; state.textContent = 'Holding';
+  heading.append(title, state);
   const label = document.createElement('span'); label.textContent = route.label;
+  label.className = 'engine-input';
+  const sample = document.createElement('canvas'); sample.width = 240; sample.height = 44;
+  sample.className = 'pen-sample'; sample.setAttribute('aria-hidden', 'true');
+  const kit = document.createElement('div'); kit.className = 'engine-kit';
+  const swatches = document.createElement('div'); swatches.className = 'ink-swatches'; swatches.setAttribute('aria-hidden', 'true');
+  const palette = document.createElement('span'); palette.className = 'ink-name';
+  const pen = document.createElement('span'); pen.className = 'pen-name';
+  kit.append(pen, palette, swatches);
   const meter = document.createElement('meter'); meter.min = 0; meter.max = 1; meter.value = 0;
   meter.setAttribute('aria-label', route.name + ' response to ' + route.label);
-  row.append(title, label, meter); $('engineLayers').append(row);
-  return { row, meter };
+  row.append(heading, label, sample, kit, meter); $('engineLayers').append(row);
+  return { row, meter, state, sample, swatches, palette, pen, styleToken: null };
 });
 const isBuilding = () => preparing || artwork.voices.some(voice => voice.building);
 
@@ -131,15 +144,23 @@ player.addEventListener('error', () => {
   if (fileURL && !pending) message('This browser could not play that file. Try MP3, WAV or another supported audio format.', true);
 });
 
-function settings(voice, seed) {
-  return ensembleSettings(voice.route, seed, $('orientation').value, $('palette').value, +$('density').value);
+function settings(voice, seed, style) {
+  return ensembleSettings(voice.route, seed, $('orientation').value, 'marker', +$('density').value, style);
 }
 async function generateAll(immediate = false) {
   const request = ++layoutGeneration; preparing = true;
-  for (const voice of artwork.voices) { voice.generation++; voice.building = false; }
+  for (const voice of artwork.voices) {
+    voice.generation++; voice.building = false; voice.pendingStyle = null; voice.art.discardQueued();
+  }
   syncControls();
   try {
-    const scenes = await Promise.all(artwork.voices.map(voice => builder.build(settings(voice, voice.art.drawnSeed || DEFAULT_SETTINGS.seed))));
+    const scenes = await Promise.all(artwork.voices.map(voice => {
+      const style = voice.art.drawnStyle ? styleDeck.withMood(voice.art.drawnStyle, $('palette').value)
+        : styleDeck.next(artwork.voices, $('palette').value);
+      if (!style) throw new Error('No ink kit available.');
+      voice.pendingStyle = style;
+      return builder.build(settings(voice, voice.art.drawnSeed || DEFAULT_SETTINGS.seed, style));
+    }));
     if (request !== layoutGeneration) return;
     if (scenes.some(scene => !scene.paths.length)) throw new Error('A layer did not produce any marker paths.');
     artwork.setScenes(scenes, immediate);
@@ -147,13 +168,20 @@ async function generateAll(immediate = false) {
     $('dimensions').textContent = scenes[0].width + ' × ' + scenes[0].height;
   } catch (error) {
     if (request === layoutGeneration) message('Composition error: ' + error.message, true);
-  } finally { if (request === layoutGeneration) { preparing = false; syncControls(); } }
+  } finally {
+    if (request === layoutGeneration) {
+      for (const voice of artwork.voices) voice.pendingStyle = null;
+      preparing = false; syncControls();
+    }
+  }
 }
 async function generateVoice(voice, seed) {
+  const style = styleDeck.next(artwork.voices, $('palette').value);
+  if (!style) return;
   const request = ++voice.generation, layout = layoutGeneration;
-  voice.requestedSeed = seed; voice.building = true;
+  voice.requestedSeed = seed; voice.building = true; voice.pendingStyle = style;
   try {
-    const scene = await builder.build(settings(voice, seed));
+    const scene = await builder.build(settings(voice, seed, style));
     if (request !== voice.generation || layout !== layoutGeneration || !voice.flowing) return;
     if (!scene.paths.length) throw new Error(voice.route.name + ' did not produce any marker paths.');
     voice.art.setScene(scene, false, voice.firstSoundSeed);
@@ -163,7 +191,7 @@ async function generateVoice(voice, seed) {
       voice.requestedSeed = voice.art.drawnSeed || DEFAULT_SETTINGS.seed;
       message('Composition error: ' + error.message, true);
     }
-  } finally { if (request === voice.generation) voice.building = false; }
+  } finally { if (request === voice.generation) { voice.building = false; voice.pendingStyle = null; } }
 }
 for (const id of ['orientation', 'palette', 'density']) {
   $(id).addEventListener('change', () => {
@@ -288,7 +316,26 @@ function updateUI(now) {
     const voice = artwork.voices[index], controls = layerControls[index];
     controls.meter.value = voice.sound.features.level;
     controls.row.classList.toggle('drawing', voice.flowing);
+    controls.state.textContent = voice.flowing ? 'Drawing' : 'Holding';
     controls.row.title = voice.flowing ? 'Drawing from ' + voice.route.label.toLowerCase() : 'Ink held; listening for ' + voice.route.label.toLowerCase();
+    const style = voice.art.drawnStyle;
+    if (style && controls.styleToken !== style.token) {
+      controls.styleToken = style.token;
+      controls.row.dataset.pen = style.pen.id; controls.row.dataset.palette = style.palette.id;
+      controls.pen.textContent = style.pen.name; controls.palette.textContent = style.palette.name;
+      controls.row.style.setProperty('--ink-color', style.colors[0]);
+      controls.swatches.replaceChildren(...style.colors.map(color => {
+        const swatch = document.createElement('i'); swatch.style.backgroundColor = color; return swatch;
+      }));
+      // The sample is drawn by the same native marker engine as the artwork.
+      const context = controls.sample.getContext('2d'), A = window.AlgoArt;
+      context.clearRect(0, 0, 240, 44);
+      const random = A.makeR('PREVIEW-' + style.token);
+      for (let i = 0; i < 3; i++) A.stroke(context,
+        [{ x: 6 + i * 78, y: 26 }, { x: 25 + i * 78, y: 5 },
+          { x: 44 + i * 78, y: 40 }, { x: 72 + i * 78, y: 18 }],
+        style.colors[i], styleSettings(style), random, true);
+    }
   }
   $('recordTime').textContent = recorder.busy ? formatTime((now - recorder.started) / 1000) : '00:00';
 }
@@ -306,14 +353,14 @@ function frame(now) {
   const flowing = soundGate.update(features.active, dt, available && Boolean(data));
   for (const voice of artwork.updateSignals(features, dt, flowing && available && Boolean(data))) {
     // Cancel only this route's obsolete work; the other engines keep drawing.
-    voice.generation++; voice.building = false;
+    voice.generation++; voice.building = false; voice.pendingStyle = null;
     voice.art.discardQueued(); voice.requestedSeed = voice.art.drawnSeed || DEFAULT_SETTINGS.seed;
   }
   const cycle = evolutionInterval(+$('evolution').value);
   for (const voice of artwork.voices) {
     const seed = voice.sound.seed;
     if (!preparing && voice.flowing && voice.sound.features.active && !voice.building && seed !== 'SOUND-READY'
-      && (voice.firstSoundSeed || (seed !== voice.requestedSeed && voice.art.needsScene(cycle, $('gentle').checked)))
+      && (voice.firstSoundSeed || voice.art.needsScene(cycle, $('gentle').checked))
       && clock - voice.lastSceneTime >= 0.25) {
       voice.lastSceneTime = clock; generateVoice(voice, seed);
     }
@@ -333,7 +380,7 @@ window.addEventListener('pagehide', () => { if (recorder.active) recorder.stop()
 
 // Small read-only diagnostics surface for smoke tests and bug reports.
 window.AlgoAnimate = Object.freeze({
-  version: '0.04',
+  version: '0.05',
   diagnostics: () => ({
     source: audio.kind, seed: artwork.drawnSeed, engine: 'ensemble',
     engines: artwork.diagnostics(), compositions: artwork.sceneCount,

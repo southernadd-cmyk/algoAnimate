@@ -45,7 +45,7 @@ export class SceneBuilder {
     A.svgRecorder = { precise: true, paths: [], paperMarks: [] };
     try {
       A.render(canvas, settings, 0.5);
-      return { ...A.svgRecorder, seed: settings.seed, mode: settings.mode, width: A.W, height: A.H, paper: settings.paper };
+      return { ...A.svgRecorder, seed: settings.seed, mode: settings.mode, style: settings.style, width: A.W, height: A.H, paper: settings.paper };
     } finally { A.svgRecorder = null; }
   }
   build(settings) {
@@ -86,6 +86,7 @@ export class AnimatedArtwork {
   get activeLayer() { return this.layers.at(-1); }
   get drawnSeed() { return this.activeLayer?.scene.seed || this.current?.seed; }
   get drawnMode() { return this.activeLayer?.scene.mode || this.current?.mode; }
+  get drawnStyle() { return this.activeLayer?.scene.style || this.current?.style; }
   needsScene(cycle, gentle = false) {
     if (this.queued || !this.activeLayer) return false;
     const remainingSeconds = (1 - this.activeLayer.age) * cycle * (gentle ? 1.6 : 1) / this.speed;

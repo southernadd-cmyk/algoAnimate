@@ -1,6 +1,6 @@
-# ALGO / ANIMATE — v0.04
+# ALGO / ANIMATE — v0.05
 
-**Make sound visible.** A browser-only audio experiment using the golden ratio
+**Sound, in living ink.** A browser-only audio experiment using the golden ratio
 and ALGO / ART's expressive marker renderer.
 
 [Open AlgoAnimate](https://southernadd-cmyk.github.io/algoAnimate/) ·
@@ -11,13 +11,14 @@ and ALGO / ART's expressive marker renderer.
 1. Click **Try demo sound**, choose an **Audio file**, connect a **Microphone**, or
    use **Browser tab** to select a playing tab and enable **Share tab audio**.
 2. Watch eight AlgoArt engines layer their marker strokes on one canvas.
-   Each layer's live meter shows the part of the sound it follows. Choose a
-   palette and landscape or portrait paper.
+   Each voice has its own pen profile and colour family, both randomised at
+   its next drawing. The cards show actual ink samples and live input meters.
+   Choose a colour mood and landscape or portrait paper.
 3. Adjust sensitivity, pen response, layer density, drawing-cycle duration and smoothing.
    **Gentle motion** starts enabled if your system requests reduced motion.
 4. Click **Record**, then **Stop recording** and **Download video**. Recordings
    contain the artwork and sound; optionally include the waveform. A take stops
-   automatically after three minutes. **Save this frame** exports a PNG.
+   automatically after three minutes. **Save frame** exports a PNG.
 
 Keep the animation tab visible while recording. Files and recordings remain on
 your device; the application does not upload sound or require an account.
@@ -67,8 +68,8 @@ its actual container. The canvas shape is preserved (1400 × 1000 landscape or
   marks per engine, with reduced defaults and translucent ink for readable overlap.
 - Ink stays in place after it is drawn. Older strokes recede from their start
   while fresh ink grows from the pen tips, so the paper keeps changing without
-  whole-image holds or crossfades while sound is present. A fresh sound-derived
-  composition is prepared just before the next pen cycle. A late target joins
+  whole-image holds or crossfades while sound is present. A fresh composition with the current sound-derived seed and a new ink kit
+  is prepared just before the next pen cycle. A late target joins
   within 200 ms of drawing time, while existing ink finishes on its own layer.
 - Each route's signal controls its pen pace and pressure. Quiet routes stop their
   own clock while other routes keep drawing. Band/level/brightness activity uses
@@ -84,16 +85,27 @@ its actual container. The canvas shape is preserved (1400 × 1000 landscape or
   a muted track or a suspended audio context closes the gate immediately.
   Silence freezes the actual pixels and discards obsolete pending targets.
   Sound resumes drawing from the held frame; a steady input can keep tracing
-  its current seed. Gentle motion slows the pens and pressure response.
+  its current seed with fresh pens and palettes each cycle. Gentle motion slows the pens and pressure response.
 - Canvas video and a clone of the Web Audio recording track are combined into a
   `MediaStream`. Stopping a take preserves the connected sound source. Chrome's
   streaming WebM export receives duration metadata so players report its length;
   the large media payload is preserved in Blob slices without re-encoding it.
 
-The mapping is deterministic for the **same ordered feature measurements and
-settings**. Live capture timing, noise, sample rates and browser FFT behaviour
-can differ, so v0.04 does not promise bit-identical videos across devices or
-mathematical uniqueness for every possible sound. Frame rate targets 30 FPS and
+The sound seeds are deterministic for the **same ordered feature measurements**.
+Pen and palette choices deliberately vary between drawings and sessions. A
+separate session random generator assigns eight different kits from 16 pen/nib
+profiles and 16 colour families. The profiles use the engine’s seven original
+pen behaviours with different nib width, wobble, pressure, dryness and overdraw
+settings. Current, queued and building kits reserve their pen and palette so
+independent handoffs cannot share a current kit. Existing strokes keep their
+original ink; style changes begin with the next drawing. Colour mood adjusts
+tones while preserving the separate families. Silence freezes kits as well as
+pixels. The public palette hook is adapted in `js/ink-palette.js`, in both the
+worker and fallback renderer; no vendor source is modified.
+
+Live capture timing, noise, sample rates and browser FFT behaviour can differ,
+so v0.05 does not promise bit-identical videos across devices or mathematical
+uniqueness for every possible sound. Frame rate targets 30 FPS and
 depends on the device, engine and number of marks. This is a prototype.
 
 The pinned engine and font are documented in
@@ -124,7 +136,10 @@ npm test
 ```
 
 GitHub Actions also runs a Chromium smoke test covering all eight composition
-engines drawing simultaneously, 24 pen lanes, real bass-only/mid-only route
+engines drawing simultaneously, 24 pen lanes, distinct native pen profiles and
+colour families, random style handoffs under changing and steady audio, held
+styles in silence, card-to-renderer agreement, keyboard controls, touch targets,
+real bass-only/mid-only route
 isolation, measured frame rate, continuous marker drawing between seed changes, captured-audio silence
 and resume, exact frozen artwork pixels, silent intervals in exported video,
 live demo analysis,

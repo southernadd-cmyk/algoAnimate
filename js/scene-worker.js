@@ -1,7 +1,7 @@
 // The original engine is deliberately kept separate from animation behaviour.
 self.window = self;
 importScripts('../vendor/algoart/phi.js', '../vendor/algoart/random.js',
-  '../vendor/algoart/palettes.js', '../vendor/algoart/marker.js', '../vendor/algoart/generator.js');
+  '../vendor/algoart/palettes.js', './ink-palette.js', '../vendor/algoart/marker.js', '../vendor/algoart/generator.js');
 
 self.onmessage = ({ data: { id, settings } }) => {
   try {
@@ -10,7 +10,7 @@ self.onmessage = ({ data: { id, settings } }) => {
     A.rendererVersion = 7;
     A.svgRecorder = { precise: true, paths: [], paperMarks: [] };
     A.render(canvas, settings, 0.5);
-    const scene = { ...A.svgRecorder, seed: settings.seed, mode: settings.mode, width: A.W, height: A.H, paper: settings.paper };
+    const scene = { ...A.svgRecorder, seed: settings.seed, mode: settings.mode, style: settings.style, width: A.W, height: A.H, paper: settings.paper };
     A.svgRecorder = null;
     self.postMessage({ id, scene });
   } catch (error) {

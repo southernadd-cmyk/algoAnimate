@@ -89,11 +89,13 @@ async function silenceCapturedTab() {
   await page.evaluate(() => {
     window.frozenInk = document.getElementById('art').toDataURL();
     window.frozenProgress = window.AlgoAnimate.diagnostics().drawing.progress;
+    window.frozenKits = JSON.stringify(window.AlgoAnimate.diagnostics().engines.map(engine => engine.style));
   });
   await page.waitForTimeout(500);
   assert.ok(await page.evaluate(() => document.getElementById('art').toDataURL() === window.frozenInk), 'Silent captured audio holds the exact painted pixels');
   assert.equal((await state()).drawing.progress, await page.evaluate(() => window.frozenProgress));
   assert.equal((await state()).source, 'tab', 'Silence does not disconnect capture');
+  assert.ok(await page.evaluate(() => JSON.stringify(window.AlgoAnimate.diagnostics().engines.map(engine => engine.style)) === window.frozenKits), 'Silence holds the current pens and palettes');
   assert.equal((await state()).drawing.queuedSeed, null, 'Silence drops obsolete future targets');
   return delay;
 }
@@ -128,7 +130,33 @@ async function motionSamples(count = 20, spacing = 80) {
   assert.ok(samples.every(s => s.ink > 20), 'Pen cycles do not clear the entire paper');
   assert.ok(samples.filter(s => s.drawing.penTips > 0).length >= count * 0.85, 'Marker tips are drawing throughout the cycle');
   assert.ok(samples.every(s => s.drawing.layers <= 24 && s.engines.every(engine => engine.layers <= 3)), 'Eight independent ink histories remain bounded');
+  for (const sample of samples) assertDistinctKits(sample.engines);
   return samples;
+}
+function assertDistinctKits(engines) {
+  assert.ok(engines.every(engine => engine.style), 'Every engine carries its actual ink kit');
+  assert.equal(new Set(engines.map(engine => engine.style.pen.id)).size, 8, 'All current pen profiles differ');
+  assert.equal(new Set(engines.map(engine => engine.style.palette.id)).size, 8, 'All current colour families differ');
+}
+async function checkRenderedKits() {
+  await page.waitForFunction(() => window.AlgoAnimate.diagnostics().engines.every(engine => {
+    const card = document.querySelector(`[data-engine="${engine.engine}"]`);
+    return card.dataset.pen === engine.style.pen.id && card.dataset.palette === engine.style.palette.id;
+  }));
+  const checked = await page.evaluate(() => {
+    const context = document.createElement('canvas').getContext('2d');
+    const normalise = color => { context.fillStyle = color; return context.fillStyle; };
+    return window.AlgoAnimate.diagnostics().engines.map(engine => {
+      const card = document.querySelector(`[data-engine="${engine.engine}"]`), style = engine.style;
+      const colors = style.colors.map(normalise);
+      return { engine: engine.engine, nativeColors: engine.ink.every(color => colors.includes(normalise(color))),
+        nib: engine.strokeSample.every(stroke => stroke.lineCap === (['broad', 'highlighter'].includes(style.pen.renderer) ? 'butt' : 'round')),
+        blend: engine.strokeSample.every(stroke => stroke.blend === (style.pen.renderer === 'highlighter' ? 'multiply' : 'source-over')),
+        labels: card.querySelector('.pen-name').textContent === style.pen.name && card.querySelector('.ink-name').textContent === style.palette.name,
+        swatches: [...card.querySelectorAll('.ink-swatches i')].every((swatch, index) => normalise(swatch.style.backgroundColor) === colors[index]) };
+    });
+  });
+  assert.ok(checked.every(engine => engine.nativeColors && engine.nib && engine.blend && engine.labels && engine.swatches), 'Native ink, nibs and card labels agree: ' + JSON.stringify(checked));
 }
 async function download(path) {
   const request = page.waitForEvent('download');
@@ -165,6 +193,14 @@ try {
   assert.equal((await state()).engines.length, 8);
   assert.ok((await state()).engines.every(engine => engine.paths > 0 && engine.pens === 3));
   assert.equal(await page.locator('.engine-row').count(), 8, 'Every engine has a visible audio-input meter');
+  assertDistinctKits((await state()).engines); await checkRenderedKits();
+  await page.focus('#connectTab');
+  assert.ok(await page.locator('#connectTab').evaluate(element => element.matches(':focus-visible') && getComputedStyle(element).outlineStyle !== 'none'), 'Keyboard focus is visible');
+  await page.focus('#tuningDetails summary'); await page.keyboard.press('Enter');
+  assert.equal(await page.locator('#tuningDetails').evaluate(element => element.open), true, 'Advanced controls open by keyboard');
+  assert.equal(await page.isVisible('#sensitivity'), true);
+  await page.keyboard.press('Enter');
+  assert.equal(await page.locator('#record').evaluate(element => element.closest('.workspace') !== null), true, 'Recording stays beside the artwork');
   console.log('All eight genuine composition engines are prepared together with 24 pen lanes.');
 
   const beforeSound = (await state()).compositions;
@@ -193,6 +229,16 @@ try {
   assert.equal(midEnd.find(engine => engine.engine === 'field').progress, midStart.find(engine => engine.engine === 'field').progress, 'Mids do not move the bass engine');
   assert.equal(midEnd.find(engine => engine.engine === 'burst').progress, midStart.find(engine => engine.engine === 'burst').progress, 'Mids do not move the treble engine');
   console.log('Real bass-only and mid-only audio independently move their assigned engine layers.');
+  await setRange('evolution', 100); await page.waitForTimeout(2400);
+  const steadyKits = [];
+  for (let frame = 0; frame < 16; frame++) {
+    await page.waitForTimeout(100);
+    const engines = (await state()).engines; assertDistinctKits(engines);
+    steadyKits.push(engines.find(engine => engine.engine === 'rects'));
+  }
+  assert.equal(new Set(steadyKits.map(engine => engine.measuredSeed)).size, 1, 'A steady tone keeps its sound seed');
+  assert.ok(new Set(steadyKits.map(engine => engine.style.token)).size > 1, 'A steady tone still starts drawings with fresh ink kits');
+  await setRange('evolution', 50);
   await setCapturedBands({ bass: 0.24, mid: 0.21, treble: 0.18 }, true);
   await page.waitForFunction(() => window.AlgoAnimate.diagnostics().engines.every(engine => engine.inkLength > 0), null, { timeout: 15000 });
   const tabSilenceStopMs = await silenceCapturedTab();
@@ -213,6 +259,18 @@ try {
   const measuredFPS = Math.min(...samples.map(sample => sample.fps));
   assert.ok(measuredFPS >= 20, 'Eight engines maintain at least 20 measured FPS on the test runner');
   await setRange('evolution', 50);
+  const styleChanges = {};
+  for (const engine of (await state()).engines) {
+    const changes = [...defaultMotion, ...samples].map(sample => sample.engines.find(voice => voice.engine === engine.engine))
+      .filter((voice, index, all) => index === 0 || voice.style.token !== all[index - 1].style.token);
+    assert.ok(changes.length >= 2, engine.engine + ' starts several drawings');
+    for (let i = 1; i < changes.length; i++) {
+      assert.notEqual(changes[i].style.pen.id, changes[i - 1].style.pen.id, engine.engine + ' changes pen');
+      assert.notEqual(changes[i].style.palette.id, changes[i - 1].style.palette.id, engine.engine + ' changes palette');
+    }
+    styleChanges[engine.engine] = changes.map(voice => ({ pen: voice.style.pen.name, palette: voice.style.palette.name }));
+  }
+  await checkRenderedKits();
   await page.screenshot({ path: resolve(results, 'desktop-continuous.png'), fullPage: true });
   console.log(`All eight engines draw simultaneously on the actual canvas; measured minimum ${measuredFPS} FPS.`);
 
@@ -363,6 +421,12 @@ try {
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(200);
+  await page.evaluate(() => scrollTo(0, 0));
+  assert.ok(await page.locator('#playDemo').evaluate(element => element.getBoundingClientRect().bottom < innerHeight), 'Mobile source controls are in the first viewport');
+  for (const selector of ['#connectTab', '#chooseFile', '#playDemo', '#snapshot', '#orientation', '#closePreview']) {
+    if (selector === '#closePreview') continue;
+    assert.ok(await page.locator(selector).evaluate(element => element.getBoundingClientRect().height >= 44), selector + ' has a usable touch target');
+  }
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'Mobile has no horizontal overflow');
   assert.ok(await page.evaluate(() => document.querySelector('.brand').getBoundingClientRect().right <= innerWidth - 12), 'Mobile branding fits');
   await page.screenshot({ path: resolve(results, 'mobile-portrait.png'), fullPage: true });
@@ -373,7 +437,8 @@ try {
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'Narrow mobile has no horizontal overflow');
   await page.screenshot({ path: resolve(results, 'mobile-landscape.png'), fullPage: true });
   assert.deepEqual(errors, [], 'No uncaught application errors');
-  const summary = { version: '0.04', desktop: 'passed', engines: 8, pens: 24, minimumMeasuredFPS: measuredFPS,
+  const summary = { version: '0.05', desktop: 'passed', engines: 8, pens: 24, minimumMeasuredFPS: measuredFPS,
+    distinctNativePensAndPalettes: 'passed', styleChanges, steadyToneFreshKits: 'passed', keyboardControls: 'passed',
     realAudioBandIsolation: 'passed', demoAnalysis: 'passed',
     continuousMarkerDrawing: enginesInMotion, noVideoHolds: 'passed', minimumChangedPixelsPer400ms: minimumChangedPixels,
     tabSilenceStopMs, recordingSilenceStopMs, maximumSilentChangedPixels, exactSilentFrameHold: 'passed', capturedPauseResumeExport: 'passed',

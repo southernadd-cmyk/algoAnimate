@@ -1,5 +1,6 @@
 import { SoundGate, SoundSeed, SILENCE, clamp, hash } from './features.js';
 import { AnimatedArtwork, DEFAULT_SETTINGS } from './scenes.js';
+import { styleSettings } from './styles.js';
 
 // Six measured features, plus two combinations. A route never reads another
 // feature's history, clock or pressure. All eight share one audio analyser.
@@ -45,10 +46,10 @@ export class RoutedSound {
   }
 }
 
-export function ensembleSettings(route, seed, orientation, palette, density = 45) {
+export function ensembleSettings(route, seed, orientation, palette, density = 45, style = null) {
   return { ...DEFAULT_SETTINGS, seed, mode: route.id, orientation, palette,
     elements: Math.round(8 + clamp(density / 100) * 20), density,
-    complexity: 46, recursion: 3, overdraw: 2, grain: 9 };
+    complexity: 46, recursion: 3, overdraw: 2, grain: 9, ...styleSettings(style) };
 }
 
 export class LayeredArtwork {
@@ -57,7 +58,7 @@ export class LayeredArtwork {
     this.context = canvas.getContext('2d', { alpha: false });
     this.voices = ENGINE_ROUTES.map(route => ({ route, art: new AnimatedArtwork(canvas),
       sound: new RoutedSound(route), flowing: false, building: false, generation: 0,
-      requestedSeed: 'SOUND-READY', firstSoundSeed: true, lastSceneTime: -1 }));
+      pendingStyle: null, requestedSeed: 'SOUND-READY', firstSoundSeed: true, lastSceneTime: -1 }));
   }
   get current() { return this.voices[0].art.current; }
   get ready() { return this.voices.every(voice => voice.art.current); }
@@ -79,7 +80,7 @@ export class LayeredArtwork {
   }
   resetSound() {
     for (const voice of this.voices) {
-      voice.generation++; voice.building = false; voice.art.discardQueued();
+      voice.generation++; voice.building = false; voice.pendingStyle = null; voice.art.discardQueued();
       voice.sound.reset(); voice.firstSoundSeed = true; voice.lastSceneTime = -1;
       voice.requestedSeed = voice.art.drawnSeed || 'SOUND-READY';
     }
@@ -127,7 +128,10 @@ export class LayeredArtwork {
       paths: art.current?.paths.length || 0, compositions: art.sceneCount,
       progress: art.stats.progress, penTips: art.stats.penTips,
       visiblePaths: art.stats.visiblePaths, inkLength: art.stats.inkLength,
-      layers: art.layers.length, cycles: art.turns, pens: 3
+      layers: art.layers.length, cycles: art.turns, pens: 3,
+      style: art.drawnStyle || null,
+      ink: [...new Set((art.activeLayer?.scene || art.current)?.paths.map(path => path.stroke) || [])],
+      strokeSample: (art.activeLayer?.scene || art.current)?.paths.slice(0, 3).map(({ width, lineCap, blend, dash }) => ({ width, lineCap, blend, dash })) || []
     }));
   }
 }
