@@ -30,6 +30,7 @@ export class ScreenAwake {
 }
 
 export function shortcut(event) {
-  if (event.repeat || event.altKey || event.ctrlKey || event.metaKey || event.target?.closest?.('input,select,textarea,button,a,[contenteditable="true"]')) return null;
+  if (event.repeat || event.altKey || event.ctrlKey || event.metaKey || event.target?.closest?.('input,select,textarea,[contenteditable="true"]')) return null;
+  if (event.key === ' ' && event.target?.closest?.('button,a')) return null;
   return ({ ' ': 'pauseDrawing', r: 'record', c: 'clearCanvas', f: 'fullscreen' })[event.key.toLowerCase()] || null;
 }

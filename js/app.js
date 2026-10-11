@@ -213,7 +213,11 @@ for (const [id, target] of [['performancePause', 'pauseDrawing'], ['performanceC
 $('performanceRecord').addEventListener('click', () => $(recorder.busy ? 'stopRecording' : 'record').click());
 $('stage').addEventListener('pointermove', showPerformanceControls);
 $('stage').addEventListener('pointerdown', showPerformanceControls);
-document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && performanceMode) setPerformance(false); });
+document.addEventListener('fullscreenchange', () => {
+  if (!performanceMode) return;
+  if (!document.fullscreenElement) setPerformance(false);
+  else $('stage').focus({ preventScroll: true });
+});
 document.addEventListener('keydown', event => {
   if ($('previewDialog').open) return;
   if (event.key === 'Escape' && performanceMode) { $('exitPerformance').click(); return; }

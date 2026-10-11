@@ -99,7 +99,7 @@ try {
   await page.keyboard.press('Space');
   await page.keyboard.press('c');
   await page.waitForFunction(() => document.getElementById('message').textContent.includes('Canvas cleared'));
-  await page.waitForFunction(() => !document.getElementById('performanceControls').classList.contains('show-controls'));
+  await page.waitForFunction(() => getComputedStyle(document.getElementById('performanceControls')).opacity === '0');
   await page.screenshot({ path: resolve(results, 'performance.png') });
   await page.keyboard.press('f');
   if ((await state()).performance) await page.keyboard.press('Escape');
