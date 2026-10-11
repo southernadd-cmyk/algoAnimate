@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { readFile, mkdir, writeFile } from 'node:fs/promises';
+import { readFile, mkdir, writeFile, mkdtemp, rm } from 'node:fs/promises';
 import { resolve, extname } from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { execFileSync, spawn } from 'node:child_process';
 import { chromium } from 'playwright';
 
 const root = resolve('.'), results = resolve('test-results');
@@ -17,11 +18,29 @@ const server = createServer(async (req, res) => {
   } catch { res.writeHead(404).end(); }
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-const browser = await chromium.launch({ headless: process.env.HEADED !== '1',
-  ignoreDefaultArgs: ['--disable-background-timer-throttling', '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding'],
-  args: ['--autoplay-policy=no-user-gesture-required'] });
-const context = await browser.newContext({ acceptDownloads: true });
-const page = await context.newPage(), errors = [];
+// Attach to an ordinary browser with no focus or throttling overrides. A
+// separate CDP session cannot release the visible-capturer handle owned by
+// Playwright's own focus emulation, so opt out before creating any pages.
+const profile = await mkdtemp(resolve(tmpdir(), 'algoanimate-clock-'));
+const chrome = spawn(chromium.executablePath(), ['--no-sandbox', '--disable-dev-shm-usage',
+  '--no-first-run', '--no-default-browser-check', '--remote-debugging-port=0',
+  '--user-data-dir=' + profile, '--autoplay-policy=no-user-gesture-required',
+  ...(process.env.HEADED === '1' ? [] : ['--headless=new']), 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
+const endpoint = await new Promise((resolve, reject) => {
+  let output = '';
+  const timeout = setTimeout(() => reject(new Error('Chromium did not start: ' + output)), 30000);
+  chrome.stderr.on('data', chunk => {
+    output += chunk;
+    const match = output.match(/DevTools listening on (ws:\/\/[^\s]+)/);
+    if (match) { clearTimeout(timeout); resolve(match[1]); }
+  });
+  chrome.once('exit', code => { clearTimeout(timeout); reject(new Error('Chromium exited: ' + code + '\n' + output)); });
+});
+const browser = await chromium.connectOverCDP(endpoint, { noDefaults: true, isLocal: true, artifactsDir: results });
+const context = browser.contexts()[0];
+const browserSession = await browser.newBrowserCDPSession();
+await browserSession.send('Browser.setDownloadBehavior', { behavior: 'allowAndName', downloadPath: results, eventsEnabled: true });
+const page = context.pages()[0], errors = [];
 page.on('pageerror', error => errors.push(error.message));
 const wait = predicate => page.waitForFunction(predicate, null, { polling: 100, timeout: 20000 });
 const state = () => page.evaluate(() => window.AlgoAnimate.diagnostics());
@@ -99,10 +118,6 @@ try {
   await page.click('#connectTab'); await wait(() => window.AlgoAnimate.diagnostics().source === 'tab');
   assert.equal((await state()).audio.recordingPath, 'direct-capture');
   await page.click('#record'); await wait(() => window.AlgoAnimate.diagnostics().recording);
-  // Playwright normally forces every page to look focused and visible. Disable
-  // that emulation so selecting the other tab changes real browser visibility.
-  const session = await context.newCDPSession(page);
-  await session.send('Emulation.setFocusEmulationEnabled', { enabled: false });
   const controls = await context.newPage(); await controls.goto('about:blank'); await controls.bringToFront();
   if (process.env.HEADED === '1') await wait(() => document.hidden);
   // Continue past Chrome's one-minute background timer threshold. Splitting
@@ -123,4 +138,9 @@ try {
   await page.screenshot({ path: resolve(results, 'hierarchy-portrait.png'), fullPage: true });
   await writeFile(resolve(results, 'recording-clock.json'), JSON.stringify({ withoutRAF, background, errors }, null, 2));
   assert.deepEqual(errors, []); console.log('PASS: recording clock, first ink without animation frames and a real background tab.');
-} finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }
+} finally {
+  await browserSession.send('Browser.close').catch(() => {});
+  await browser.close(); chrome.kill();
+  await new Promise(resolve => server.close(resolve));
+  await rm(profile, { recursive: true, force: true });
+}
