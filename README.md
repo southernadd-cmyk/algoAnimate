@@ -80,8 +80,8 @@ its actual container. The canvas shape is preserved (1400 × 1000 landscape or
   The initial active pen now draws a tiny real marker arc in the first audible
   frame. Other engines enter over about 260 ms, avoiding both sudden fully drawn
   lines and the previous blank 1.1-second restart delay.
-  On the first clean-sheet sound entrance, eight engines enter 90 ms apart and
-  their pen speed eases up over 450 ms, without altering the sound-derived seeds.
+  On the first clean-sheet sound entrance, active engines enter 27 ms apart and
+  their pen speed eases up over 120 ms, without altering the sound-derived seeds.
   First sound-seeded replacements wait for the clean-sheet introduction to finish
   rather than competing with the first frames. Pausing the audio subsequently
   holds the ink and resumes immediately without replaying the entrance.
@@ -196,7 +196,8 @@ source silence, composition coverage compared with the previous minimum density,
 all eight engines drawing at minimum density, waveform export, source
 cleanup, permission errors, audio-file replay, portrait rendering and mobile
 layout. It inspects the exported video with `ffprobe`, saves screenshots and a
-sample take as workflow artifacts, then deploys only after those checks pass.
+sample take as workflow artifacts. Normal pushes deploy after those checks pass;
+explicit verified releases reuse the passed checks for identical application code.
 An additional headed Chromium test checks first ink while animation callbacks
 are stopped, then records with the artwork in a real background tab for over a
 minute. It checks actual video frame timestamps and changing artwork pixels.
