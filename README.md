@@ -1,4 +1,4 @@
-# ALGO / ANIMATE — v0.03
+# ALGO / ANIMATE — v0.04
 
 **Make sound visible.** A browser-only audio experiment using the golden ratio
 and ALGO / ART's expressive marker renderer.
@@ -10,9 +10,10 @@ and ALGO / ART's expressive marker renderer.
 
 1. Click **Try demo sound**, choose an **Audio file**, connect a **Microphone**, or
    use **Browser tab** to select a playing tab and enable **Share tab audio**.
-2. Watch the incoming waveform and the live artwork. Choose any of eight AlgoArt
-   engines, a palette and landscape or portrait paper.
-3. Adjust sensitivity, pen response, drawing-cycle duration and smoothing.
+2. Watch eight AlgoArt engines layer their marker strokes on one canvas.
+   Each layer's live meter shows the part of the sound it follows. Choose a
+   palette and landscape or portrait paper.
+3. Adjust sensitivity, pen response, layer density, drawing-cycle duration and smoothing.
    **Gentle motion** starts enabled if your system requests reduced motion.
 4. Click **Record**, then **Stop recording** and **Download video**. Recordings
    contain the artwork and sound; optionally include the waveform. A take stops
@@ -36,29 +37,54 @@ its actual container. The canvas shape is preserved (1400 × 1000 landscape or
 
 ## How sound becomes artwork
 
-- Web Audio measures loudness, bass/mid/treble, spectral centroid and spectral
-  changes. A short, quantised history of those measurements generates changing
-  seeds, with no timestamp or random salt.
+- One Web Audio analyser measures six features of the same sound source.
+  They are three frequency bands and three other measurements, rather than six
+  separate audio tracks. All eight engines are present together:
+
+| Engine | Its audio input |
+| --- | --- |
+| Orbital Studies | Bass (35–250 Hz) |
+| Recursive Divisions | Mids (250–2200 Hz) |
+| Radiant Systems | Treble (2200–14000 Hz) |
+| Growth Systems | Loudness |
+| Constructed Forms | Brightness / spectral centroid |
+| Connected Fields | Onsets / spectral change |
+| Automatic Marks | Bass + onsets |
+| Golden Trajectories | Mids + treble |
+
+- Each engine hashes a short, ordered, quantised history of only its assigned
+  measurements into its own seed. Unassigned measurements cannot influence
+  that engine's seed, pen pace or stroke pressure. There is no timestamp or
+  random salt. The two combined routes use both inputs for their seed and their
+  average strength for the drawing response.
 - AlgoArt V7 generates genuine φ compositions and marker paths. New compositions
-  are built in a worker where supported. Three pen timelines draw the original
+  are built in a worker where supported. Three pen timelines per engine draw the original
   marker paths progressively by arc length, including exact partial cubic
-  curves, wobble, overdraw, ink colours, opacity and dryness.
+  curves, wobble, overdraw, ink colours, opacity, dryness and portrait transforms.
+  This provides 24 pen lanes across eight independent clocks. Layers draw into
+  the same canvas; paper is painted once so one engine cannot erase another.
+  Each engine retains at most three ink generations. Layer density controls the
+  marks per engine, with reduced defaults and translucent ink for readable overlap.
 - Ink stays in place after it is drawn. Older strokes recede from their start
   while fresh ink grows from the pen tips, so the paper keeps changing without
   whole-image holds or crossfades while sound is present. A fresh sound-derived
   composition is prepared just before the next pen cycle. A late target joins
   within 200 ms of drawing time, while existing ink finishes on its own layer.
-- Loudness and spectral changes control pen pace; bass adds pressure to larger
-  strokes and treble to finer marks. Pressure is captured when each stroke
-  begins, so completed marks do not float or pulse around the paper.
+- Each route's signal controls its pen pace and pressure. Quiet routes stop their
+  own clock while other routes keep drawing. Band/level/brightness activity uses
+  a 0.012 feature floor and 90 ms release; the onset route uses a 0.035 floor and
+  a 240 ms drawing tail. The global silence gate overrides every route, including
+  onset tails. Pressure is captured when each stroke begins, so completed marks
+  do not float or pulse around the paper. The idle canvas waits for audio before
+  laying down ink; the initial eight prepared compositions are not shown as posters.
 - Drawing stops when the incoming audio goes silent, including when a video
   in a captured tab is paused. The gate uses current RMS above 0.0015 with a
   90 ms release for tiny gaps; visual smoothing cannot keep the pens running.
   Source capture/analysis adds a small detection delay. Pausing an uploaded file,
   a muted track or a suspended audio context closes the gate immediately.
   Silence freezes the actual pixels and discards obsolete pending targets.
-  Sound resumes drawing from the held frame; a steady audible sound can keep
-  tracing its current seed. Gentle motion slows the pens and pressure response.
+  Sound resumes drawing from the held frame; a steady input can keep tracing
+  its current seed. Gentle motion slows the pens and pressure response.
 - Canvas video and a clone of the Web Audio recording track are combined into a
   `MediaStream`. Stopping a take preserves the connected sound source. Chrome's
   streaming WebM export receives duration metadata so players report its length;
@@ -66,7 +92,7 @@ its actual container. The canvas shape is preserved (1400 × 1000 landscape or
 
 The mapping is deterministic for the **same ordered feature measurements and
 settings**. Live capture timing, noise, sample rates and browser FFT behaviour
-can differ, so v0.03 does not promise bit-identical videos across devices or
+can differ, so v0.04 does not promise bit-identical videos across devices or
 mathematical uniqueness for every possible sound. Frame rate targets 30 FPS and
 depends on the device, engine and number of marks. This is a prototype.
 
@@ -97,8 +123,9 @@ npm run check
 npm test
 ```
 
-GitHub Actions also runs a Chromium smoke test covering every composition
-engine, continuous marker drawing between seed changes, captured-audio silence
+GitHub Actions also runs a Chromium smoke test covering all eight composition
+engines drawing simultaneously, 24 pen lanes, real bass-only/mid-only route
+isolation, measured frame rate, continuous marker drawing between seed changes, captured-audio silence
 and resume, exact frozen artwork pixels, silent intervals in exported video,
 live demo analysis,
 recording with audio, waveform export, source

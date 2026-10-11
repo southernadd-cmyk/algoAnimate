@@ -12,11 +12,11 @@ export function hash(text) {
 export const SOUND_FLOOR = 0.0015;
 export const SOUND_RELEASE_SECONDS = 0.09;
 export class SoundGate {
-  constructor() { this.reset(); }
+  constructor(release = SOUND_RELEASE_SECONDS) { this.release = release; this.reset(); }
   reset() { this.remaining = 0; this.open = false; }
   update(active, dt, available = true) {
     if (!available) { this.reset(); return false; }
-    this.remaining = active ? SOUND_RELEASE_SECONDS : Math.max(0, this.remaining - dt);
+    this.remaining = active ? this.release : Math.max(0, this.remaining - dt);
     this.open = this.remaining > 0;
     return this.open;
   }
@@ -89,15 +89,16 @@ export class FeatureTracker {
 
 // Hash a short, ordered sound history, rather than raw samples (which jitter).
 export class SoundSeed {
-  constructor() { this.reset(); }
+  constructor(keys = ['level', 'bass', 'mid', 'treble', 'centroid', 'flux']) {
+    this.keys = keys; this.reset();
+  }
   reset() { this.history = []; this.accumulator = 0; this.seed = 'SOUND-READY'; }
   update(features, dt) {
     if (!features.active) return this.seed;
     this.accumulator += dt;
     if (this.accumulator < 0.12) return this.seed;
     this.accumulator %= 0.12;
-    const keys = ['level', 'bass', 'mid', 'treble', 'centroid', 'flux'];
-    const signature = keys.map(key => Math.round(clamp(features.raw[key]) * 31).toString(36)).join('.');
+    const signature = this.keys.map(key => Math.round(clamp(features.raw[key]) * 31).toString(36)).join('.');
     this.history.push(signature);
     if (this.history.length > 16) this.history.shift();
     this.seed = 'SOUND-' + hash(this.history.join('|')).toString(16).padStart(8, '0').toUpperCase();

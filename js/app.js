@@ -1,6 +1,7 @@
 import { AudioInput, describeCaptureError } from './audio.js';
-import { FeatureTracker, SoundSeed, SoundGate, SILENCE, clamp, evolutionInterval } from './features.js';
-import { SceneBuilder, AnimatedArtwork, DEFAULT_SETTINGS } from './scenes.js';
+import { FeatureTracker, SoundGate, SILENCE, clamp, evolutionInterval } from './features.js';
+import { SceneBuilder, DEFAULT_SETTINGS } from './scenes.js';
+import { LayeredArtwork, ensembleSettings } from './ensemble.js';
 import { VideoRecorder, MAX_TAKE_SECONDS } from './recording.js';
 
 const $ = id => document.getElementById(id);
@@ -8,17 +9,26 @@ const art = $('art'), waveform = $('waveform'), player = $('filePlayer');
 const waveContext = waveform.getContext('2d');
 const recordingCanvas = document.createElement('canvas');
 const recordingContext = recordingCanvas.getContext('2d', { alpha: false });
-const artwork = new AnimatedArtwork(art), builder = new SceneBuilder();
-const tracker = new FeatureTracker(), soundSeed = new SoundSeed();
+const artwork = new LayeredArtwork(art), builder = new SceneBuilder();
+const tracker = new FeatureTracker();
 const soundGate = new SoundGate();
 let features = SILENCE, pending = false, fileURL = null, fileLabel = '', sourceLabel = '';
-let requestedSeed = DEFAULT_SETTINGS.seed, generation = 0, building = false;
-let clock = 0, lastSceneTime = 0, previousFrame = 0, uiTime = 0, onsetUntil = 0;
+let layoutGeneration = 0, preparing = false;
+let clock = 0, previousFrame = 0, uiTime = 0, onsetUntil = 0;
 let frames = 0, fpsStart = performance.now(), fps = 0, recordingWithWaveform = false;
 let startRecordPending = false;
-let firstSoundSeed = false;
 const waveHistory = [];
 const names = { tab: 'Browser tab audio', microphone: 'Microphone', demo: 'Demo · 108 BPM' };
+const layerControls = artwork.voices.map(({ route }) => {
+  const row = document.createElement('div'); row.className = 'engine-row'; row.dataset.engine = route.id;
+  const title = document.createElement('strong'); title.textContent = route.name;
+  const label = document.createElement('span'); label.textContent = route.label;
+  const meter = document.createElement('meter'); meter.min = 0; meter.max = 1; meter.value = 0;
+  meter.setAttribute('aria-label', route.name + ' response to ' + route.label);
+  row.append(title, label, meter); $('engineLayers').append(row);
+  return { row, meter };
+});
+const isBuilding = () => preparing || artwork.voices.some(voice => voice.building);
 
 function message(text, error = false) {
   $('message').textContent = text;
@@ -47,7 +57,7 @@ function syncControls() {
   $('stopAudio').disabled = !audio.kind || pending || startRecordPending;
   $('orientation').disabled = recorder.busy || startRecordPending;
   $('includeWaveform').disabled = recorder.busy || startRecordPending;
-  $('record').disabled = !audio.kind || !recorder.mimeType || !artwork.current || locked || building;
+  $('record').disabled = !audio.kind || !recorder.mimeType || !artwork.ready || locked || preparing;
   $('record').hidden = recorder.busy;
   $('stopRecording').hidden = !recorder.busy;
   $('stopRecording').disabled = Boolean(recorder.stopping);
@@ -66,9 +76,8 @@ function syncControls() {
 }
 
 function resetSound() {
-  tracker.reset(); soundSeed.reset(); soundGate.reset(); features = SILENCE;
+  tracker.reset(); soundGate.reset(); artwork.resetSound(); features = SILENCE;
   waveHistory.length = 0;
-  firstSoundSeed = true; lastSceneTime = clock;
 }
 
 async function connect(action, label) {
@@ -122,35 +131,47 @@ player.addEventListener('error', () => {
   if (fileURL && !pending) message('This browser could not play that file. Try MP3, WAV or another supported audio format.', true);
 });
 
-function settings(seed) {
-  return { ...DEFAULT_SETTINGS, seed, mode: $('engine').value, orientation: $('orientation').value, palette: $('palette').value };
+function settings(voice, seed) {
+  return ensembleSettings(voice.route, seed, $('orientation').value, $('palette').value, +$('density').value);
 }
-async function generate(seed, immediate = false, startNow = false) {
-  const request = ++generation;
-  requestedSeed = seed; building = true;
+async function generateAll(immediate = false) {
+  const request = ++layoutGeneration; preparing = true;
+  for (const voice of artwork.voices) { voice.generation++; voice.building = false; }
   syncControls();
   try {
-    const scene = await builder.build(settings(seed));
-    if (request !== generation) return;
-    if (!scene.paths.length) throw new Error('The composition did not produce any marks. Select another engine.');
-    artwork.setScene(scene, immediate, startNow);
-    $('stage').classList.toggle('portrait', scene.height > scene.width);
-    $('dimensions').textContent = scene.width + ' × ' + scene.height;
-    $('seed').textContent = artwork.drawnSeed;
-    $('sceneCount').textContent = String(artwork.sceneCount).padStart(2, '0');
-    syncControls();
+    const scenes = await Promise.all(artwork.voices.map(voice => builder.build(settings(voice, voice.art.drawnSeed || DEFAULT_SETTINGS.seed))));
+    if (request !== layoutGeneration) return;
+    if (scenes.some(scene => !scene.paths.length)) throw new Error('A layer did not produce any marker paths.');
+    artwork.setScenes(scenes, immediate);
+    $('stage').classList.toggle('portrait', scenes[0].height > scenes[0].width);
+    $('dimensions').textContent = scenes[0].width + ' × ' + scenes[0].height;
   } catch (error) {
-    if (request === generation) { requestedSeed = artwork.current?.seed || DEFAULT_SETTINGS.seed; message('Composition error: ' + error.message, true); }
-  } finally { if (request === generation) { building = false; syncControls(); } }
+    if (request === layoutGeneration) message('Composition error: ' + error.message, true);
+  } finally { if (request === layoutGeneration) { preparing = false; syncControls(); } }
 }
-for (const id of ['engine', 'orientation', 'palette']) {
+async function generateVoice(voice, seed) {
+  const request = ++voice.generation, layout = layoutGeneration;
+  voice.requestedSeed = seed; voice.building = true;
+  try {
+    const scene = await builder.build(settings(voice, seed));
+    if (request !== voice.generation || layout !== layoutGeneration || !voice.flowing) return;
+    if (!scene.paths.length) throw new Error(voice.route.name + ' did not produce any marker paths.');
+    voice.art.setScene(scene, false, voice.firstSoundSeed);
+    voice.firstSoundSeed = false;
+  } catch (error) {
+    if (request === voice.generation) {
+      voice.requestedSeed = voice.art.drawnSeed || DEFAULT_SETTINGS.seed;
+      message('Composition error: ' + error.message, true);
+    }
+  } finally { if (request === voice.generation) voice.building = false; }
+}
+for (const id of ['orientation', 'palette', 'density']) {
   $(id).addEventListener('change', () => {
     if (id === 'orientation' && recorder.busy) return;
-    generate(artwork.current?.seed || DEFAULT_SETTINGS.seed, !audio.kind || (audio.kind === 'file' && player.paused));
-    lastSceneTime = clock;
+    generateAll(id === 'orientation' || !soundGate.open);
   });
 }
-for (const id of ['sensitivity', 'motion', 'evolution', 'smoothing']) {
+for (const id of ['sensitivity', 'motion', 'evolution', 'smoothing', 'density']) {
   const update = () => $(id + 'Value').textContent = id === 'evolution'
     ? '~' + evolutionInterval(+$(id).value).toFixed(1) + 's' : $(id).value + '%';
   $(id).addEventListener('input', update); update();
@@ -196,7 +217,7 @@ function paintRecording() {
 }
 
 $('record').addEventListener('click', async () => {
-  if (!audio.kind || recorder.busy || pending || !artwork.current || startRecordPending || building) return;
+  if (!audio.kind || recorder.busy || pending || !artwork.ready || startRecordPending || preparing) return;
   startRecordPending = true; syncControls();
   try {
     await audio.ready();
@@ -219,7 +240,7 @@ function updateTake() {
   $('take').hidden = false;
   $('takeDetails').textContent = `${formatTime(take.seconds)} / ${(take.blob.size / 1048576).toFixed(1)} MB / ${take.extension.toUpperCase()}`;
   $('download').href = take.url;
-  $('download').download = `algoanimate-${$('engine').value}-${fileStamp()}.${take.extension}`;
+  $('download').download = `algoanimate-ensemble-${fileStamp()}.${take.extension}`;
 }
 $('previewRecording').addEventListener('click', () => {
   if (!recorder.result) return;
@@ -235,7 +256,7 @@ $('snapshot').addEventListener('click', () => {
   art.toBlob(blob => {
     if (!blob) { message('The frame could not be exported.', true); return; }
     const url = URL.createObjectURL(blob), link = document.createElement('a');
-    link.href = url; link.download = `algoanimate-${$('engine').value}-${fileStamp()}.png`;
+    link.href = url; link.download = `algoanimate-ensemble-${fileStamp()}.png`;
     link.click(); setTimeout(() => URL.revokeObjectURL(url), 30000);
   }, 'image/png');
 });
@@ -261,6 +282,14 @@ function updateUI(now) {
   $('beat').classList.toggle('lit', now < onsetUntil);
   $('fps').textContent = String(fps || '—');
   $('seed').textContent = artwork.drawnSeed || DEFAULT_SETTINGS.seed;
+  $('sceneCount').textContent = String(artwork.sceneCount).padStart(2, '0');
+  $('activeLayers').textContent = artwork.voices.filter(voice => voice.flowing).length + ' / 8 DRAWING';
+  for (let index = 0; index < artwork.voices.length; index++) {
+    const voice = artwork.voices[index], controls = layerControls[index];
+    controls.meter.value = voice.sound.features.level;
+    controls.row.classList.toggle('drawing', voice.flowing);
+    controls.row.title = voice.flowing ? 'Drawing from ' + voice.route.label.toLowerCase() : 'Ink held; listening for ' + voice.route.label.toLowerCase();
+  }
   $('recordTime').textContent = recorder.busy ? formatTime((now - recorder.started) / 1000) : '00:00';
 }
 
@@ -275,22 +304,21 @@ function frame(now) {
   if (features.beat) onsetUntil = now + 150;
   const available = Boolean(audio.kind) && !(audio.kind === 'file' && player.paused);
   const flowing = soundGate.update(features.active, dt, available && Boolean(data));
-  if (artwork.flowing && !flowing) {
-    // Reject a worker response that arrives after the source goes quiet.
-    // Keep the exact painted frame and measure a fresh target on resumption.
-    generation++; building = false;
-    artwork.discardQueued(); requestedSeed = artwork.drawnSeed || DEFAULT_SETTINGS.seed;
-    syncControls();
+  for (const voice of artwork.updateSignals(features, dt, flowing && available && Boolean(data))) {
+    // Cancel only this route's obsolete work; the other engines keep drawing.
+    voice.generation++; voice.building = false;
+    voice.art.discardQueued(); voice.requestedSeed = voice.art.drawnSeed || DEFAULT_SETTINGS.seed;
   }
-  const seed = soundSeed.update(features, dt);
   const cycle = evolutionInterval(+$('evolution').value);
-  if (features.active && !building && seed !== 'SOUND-READY'
-    && (firstSoundSeed || (seed !== requestedSeed && artwork.needsScene(cycle, $('gentle').checked))) && clock - lastSceneTime >= 0.25) {
-    lastSceneTime = clock;
-    const startNow = firstSoundSeed; firstSoundSeed = false;
-    generate(seed, false, startNow);
+  for (const voice of artwork.voices) {
+    const seed = voice.sound.seed;
+    if (!preparing && voice.flowing && voice.sound.features.active && !voice.building && seed !== 'SOUND-READY'
+      && (voice.firstSoundSeed || (seed !== voice.requestedSeed && voice.art.needsScene(cycle, $('gentle').checked)))
+      && clock - voice.lastSceneTime >= 0.25) {
+      voice.lastSceneTime = clock; generateVoice(voice, seed);
+    }
   }
-  artwork.draw(features, dt, +$('motion').value / 100, $('gentle').checked, cycle, flowing);
+  artwork.draw(dt, +$('motion').value / 100, $('gentle').checked, cycle);
   drawWaveform(data?.wave);
   if (recorder.busy) paintRecording();
   frames++;
@@ -305,19 +333,19 @@ window.addEventListener('pagehide', () => { if (recorder.active) recorder.stop()
 
 // Small read-only diagnostics surface for smoke tests and bug reports.
 window.AlgoAnimate = Object.freeze({
-  version: '0.03',
+  version: '0.04',
   diagnostics: () => ({
-    source: audio.kind, seed: artwork.drawnSeed, engine: artwork.drawnMode,
-    targetSeed: artwork.current?.seed, compositions: artwork.sceneCount,
-    paths: artwork.current?.paths.length || 0, worker: Boolean(builder.worker), building,
+    source: audio.kind, seed: artwork.drawnSeed, engine: 'ensemble',
+    engines: artwork.diagnostics(), compositions: artwork.sceneCount,
+    paths: artwork.pathCount, worker: Boolean(builder.worker), building: isBuilding(),
     dimensions: [art.width, art.height], features: { level: features.level, bass: features.bass,
       mid: features.mid, treble: features.treble, rms: features.rms, active: features.active },
     recording: recorder.active, recordingBusy: recorder.busy,
     recordedBytes: recorder.result?.blob.size || 0, recordingType: recorder.result?.type || recorder.mimeType,
-    drawing: { ...artwork.stats, layers: artwork.layers.length, cycles: artwork.turns,
-      queuedSeed: artwork.queued?.seed || null, queuedSeconds: artwork.queuedSeconds, flowing: artwork.flowing },
+    drawing: { ...artwork.stats, pens: 24,
+      queuedSeed: artwork.voices.find(voice => voice.art.queued)?.art.queued.seed || null, flowing: artwork.flowing },
     fps, maxTakeSeconds: MAX_TAKE_SECONDS
   })
 });
-syncControls(); drawWaveform(null); generate(DEFAULT_SETTINGS.seed, true);
+syncControls(); drawWaveform(null); generateAll(true);
 requestAnimationFrame(frame);

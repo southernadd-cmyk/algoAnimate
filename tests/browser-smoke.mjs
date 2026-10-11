@@ -42,19 +42,41 @@ async function connectControlledTab() {
   // Stub only the browser's share dialog. The captured track, analyser,
   // silence and canvas below are real browser audio/video APIs.
   await page.evaluate(async () => {
-    const context = new AudioContext(), oscillator = context.createOscillator(), gain = context.createGain();
+    const context = new AudioContext(), gain = context.createGain();
     const destination = context.createMediaStreamDestination();
-    oscillator.frequency.value = 220; gain.gain.value = 0.25;
-    oscillator.connect(gain); gain.connect(destination); oscillator.start(); await context.resume();
+    gain.gain.value = 0.8; gain.connect(destination);
+    const bands = {}, oscillators = [];
+    for (const [name, hz] of Object.entries({ bass: 110, mid: 880, treble: 6000 })) {
+      const oscillator = context.createOscillator(), band = context.createGain();
+      oscillator.frequency.value = hz; band.gain.value = name === 'bass' ? 0.2 : 0;
+      oscillator.connect(band); band.connect(gain); oscillator.start();
+      bands[name] = band; oscillators.push(oscillator);
+    }
+    await context.resume();
     const canvas = document.createElement('canvas'); canvas.width = canvas.height = 10;
     canvas.getContext('2d').fillRect(0, 0, 10, 10);
     const video = canvas.captureStream(1);
     const stream = new MediaStream([...destination.stream.getAudioTracks(), ...video.getVideoTracks()]);
-    window.testSignal = { context, oscillator, gain, stream };
+    window.testSignal = { context, oscillators, bands, gain, stream };
     navigator.mediaDevices.getDisplayMedia = async () => stream;
   });
   await page.click('#connectTab');
   await page.waitForFunction(() => window.AlgoAnimate.diagnostics().source === 'tab' && window.AlgoAnimate.diagnostics().drawing.flowing);
+}
+async function setCapturedBands(values, pulse = false) {
+  await page.evaluate(({ values, pulse }) => {
+    const { context, bands } = window.testSignal, now = context.currentTime;
+    for (const [index, name] of Object.keys(bands).entries()) {
+      const gain = bands[name].gain;
+      gain.cancelScheduledValues(now); gain.setValueAtTime(values[name] || 0, now);
+      if (pulse && values[name]) for (let beat = 0; beat < 400; beat++) {
+        const time = now + 0.03 + index * 0.035 + beat * 0.22;
+        gain.setValueAtTime(0.07, time);
+        gain.linearRampToValueAtTime(values[name], time + 0.025);
+        gain.exponentialRampToValueAtTime(0.07, time + 0.2);
+      }
+    }
+  }, { values, pulse });
 }
 async function silenceCapturedTab() {
   await page.evaluate(() => {
@@ -77,7 +99,7 @@ async function silenceCapturedTab() {
 }
 async function resumeCapturedTab() {
   const before = (await state()).drawing.progress;
-  await page.evaluate(() => window.testSignal.gain.gain.setValueAtTime(0.25, window.testSignal.context.currentTime));
+  await page.evaluate(() => window.testSignal.gain.gain.setValueAtTime(0.8, window.testSignal.context.currentTime));
   await page.waitForFunction(() => window.AlgoAnimate.diagnostics().drawing.flowing);
   await page.waitForFunction(progress => window.AlgoAnimate.diagnostics().drawing.progress !== progress, before);
 }
@@ -97,14 +119,15 @@ async function motionSamples(count = 20, spacing = 80) {
         hash = Math.imul(hash ^ pixels[i + 2], 16777619);
         if (pixels[i] < 205 || pixels[i + 1] < 205 || pixels[i + 2] < 185) ink++;
       }
-      samples.push({ hash: hash >>> 0, ink, drawing: window.AlgoAnimate.diagnostics().drawing });
+      const state = window.AlgoAnimate.diagnostics();
+      samples.push({ hash: hash >>> 0, ink, drawing: state.drawing, engines: state.engines, fps: state.fps });
     }
     return samples;
   }, { count, spacing });
   assert.ok(new Set(samples.map(s => s.hash)).size >= count * 0.9, 'Actual artwork pixels keep changing between seeds');
   assert.ok(samples.every(s => s.ink > 20), 'Pen cycles do not clear the entire paper');
   assert.ok(samples.filter(s => s.drawing.penTips > 0).length >= count * 0.85, 'Marker tips are drawing throughout the cycle');
-  assert.ok(samples.every(s => s.drawing.layers <= 3), 'Ink history remains bounded');
+  assert.ok(samples.every(s => s.drawing.layers <= 24 && s.engines.every(engine => engine.layers <= 3)), 'Eight independent ink histories remain bounded');
   return samples;
 }
 async function download(path) {
@@ -137,21 +160,41 @@ try {
   await page.screenshot({ path: resolve(results, 'desktop-ready.png'), fullPage: true });
   console.log('Initial worker-generated artwork ready.');
 
-  for (const engine of ['field', 'rects', 'burst', 'network', 'organic', 'geometric', 'scribble', 'spiral']) {
-    await select('engine', engine); assert.ok((await state()).paths > 0, engine + ' creates marker paths');
-  }
-  console.log('All eight composition engines render.');
+  assert.equal(await page.locator('#engine').count(), 0, 'The single-engine picker is removed');
+  assert.equal((await state()).engine, 'ensemble');
+  assert.equal((await state()).engines.length, 8);
+  assert.ok((await state()).engines.every(engine => engine.paths > 0 && engine.pens === 3));
+  assert.equal(await page.locator('.engine-row').count(), 8, 'Every engine has a visible audio-input meter');
+  console.log('All eight genuine composition engines are prepared together with 24 pen lanes.');
 
   const beforeSound = (await state()).compositions;
   await page.click('#playDemo');
   await page.waitForFunction(() => window.AlgoAnimate.diagnostics().features.level > 0.015, null, { timeout: 10000 });
-  await page.waitForFunction(count => window.AlgoAnimate.diagnostics().compositions > count && /^SOUND-[0-9A-F]{8}$/.test(window.AlgoAnimate.diagnostics().seed), beforeSound, { timeout: 12000 });
+  await page.waitForFunction(count => window.AlgoAnimate.diagnostics().compositions > count && window.AlgoAnimate.diagnostics().engines.some(engine => /^SOUND-[0-9A-F]{8}$/.test(engine.seed)), beforeSound, { timeout: 12000 });
   assert.equal((await state()).source, 'demo');
   await page.waitForFunction(() => window.AlgoAnimate.diagnostics().fps > 5, null, { timeout: 10000 });
   await page.screenshot({ path: resolve(results, 'desktop-live.png'), fullPage: true });
   console.log('Demo produces measured audio, a waveform and sound-derived composition changes.');
 
   await connectControlledTab();
+  await page.waitForTimeout(400);
+  const bassStart = (await state()).engines;
+  await page.waitForTimeout(400);
+  const bassEnd = (await state()).engines;
+  assert.ok(bassEnd.find(engine => engine.engine === 'field').progress !== bassStart.find(engine => engine.engine === 'field').progress, 'Bass drives the bass engine');
+  for (const id of ['rects', 'burst', 'spiral']) {
+    assert.equal(bassEnd.find(engine => engine.engine === id).progress, bassStart.find(engine => engine.engine === id).progress, 'A bass-only stream holds ' + id);
+  }
+  await setCapturedBands({ mid: 0.2 }); await page.waitForTimeout(350);
+  const midStart = (await state()).engines;
+  await page.waitForTimeout(400);
+  const midEnd = (await state()).engines;
+  assert.ok(midEnd.find(engine => engine.engine === 'rects').progress !== midStart.find(engine => engine.engine === 'rects').progress, 'Mids drive the midrange engine');
+  assert.equal(midEnd.find(engine => engine.engine === 'field').progress, midStart.find(engine => engine.engine === 'field').progress, 'Mids do not move the bass engine');
+  assert.equal(midEnd.find(engine => engine.engine === 'burst').progress, midStart.find(engine => engine.engine === 'burst').progress, 'Mids do not move the treble engine');
+  console.log('Real bass-only and mid-only audio independently move their assigned engine layers.');
+  await setCapturedBands({ bass: 0.24, mid: 0.21, treble: 0.18 }, true);
+  await page.waitForFunction(() => window.AlgoAnimate.diagnostics().engines.every(engine => engine.inkLength > 0), null, { timeout: 15000 });
   const tabSilenceStopMs = await silenceCapturedTab();
   await page.waitForFunction(() => document.getElementById('liveLabel').textContent.includes('DRAWING PAUSED'));
   await resumeCapturedTab();
@@ -161,15 +204,17 @@ try {
   await writeFile(resolve(results, 'continuous-ink.json'), JSON.stringify(defaultMotion, null, 2));
   const enginesInMotion = {};
   await setRange('evolution', 100);
-  for (const engine of ['field', 'rects', 'burst', 'network', 'organic', 'geometric', 'scribble', 'spiral']) {
-    await select('engine', engine);
-    await page.waitForFunction(mode => window.AlgoAnimate.diagnostics().engine === mode, engine, { timeout: 12000 });
-    const samples = await motionSamples();
-    enginesInMotion[engine] = { uniqueFrames: new Set(samples.map(s => s.hash)).size, frames: samples.length };
+  const samples = await motionSamples(40, 100);
+  for (const engine of (await state()).engines) {
+    const drawingFrames = samples.filter(sample => sample.engines.find(voice => voice.engine === engine.engine).penTips > 0).length;
+    assert.ok(drawingFrames > 20, engine.engine + ' draws simultaneously with the other engines');
+    enginesInMotion[engine.engine] = { drawingFrames, frames: samples.length, inputs: engine.inputs };
   }
+  const measuredFPS = Math.min(...samples.map(sample => sample.fps));
+  assert.ok(measuredFPS >= 20, 'Eight engines maintain at least 20 measured FPS on the test runner');
   await setRange('evolution', 50);
   await page.screenshot({ path: resolve(results, 'desktop-continuous.png'), fullPage: true });
-  console.log('All eight engines continuously draw actual marker strokes; no blank-paper resets or image holds.');
+  console.log(`All eight engines draw simultaneously on the actual canvas; measured minimum ${measuredFPS} FPS.`);
 
   await page.click('#record');
   await page.waitForFunction(() => window.AlgoAnimate.diagnostics().recording);
@@ -266,7 +311,7 @@ try {
   console.log('Denied capture and missing shared audio recover without stopping a working source.');
 
   await page.click('#stopAudio');
-  await page.evaluate(async () => { window.testSignal.oscillator.stop(); await window.testSignal.context.close(); });
+  await page.evaluate(async () => { window.testSignal.oscillators.forEach(oscillator => oscillator.stop()); await window.testSignal.context.close(); });
   assert.equal((await state()).source, null);
   await page.setInputFiles('#fileInput', { name: 'test-tone.wav', mimeType: 'audio/wav', buffer: wav() });
   await page.waitForFunction(() => window.AlgoAnimate.diagnostics().source === 'file' && window.AlgoAnimate.diagnostics().features.level > 0.1);
@@ -294,7 +339,8 @@ try {
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'Narrow mobile has no horizontal overflow');
   await page.screenshot({ path: resolve(results, 'mobile-landscape.png'), fullPage: true });
   assert.deepEqual(errors, [], 'No uncaught application errors');
-  const summary = { version: '0.03', desktop: 'passed', engines: 8, demoAnalysis: 'passed',
+  const summary = { version: '0.04', desktop: 'passed', engines: 8, pens: 24, minimumMeasuredFPS: measuredFPS,
+    realAudioBandIsolation: 'passed', demoAnalysis: 'passed',
     continuousMarkerDrawing: enginesInMotion, noVideoHolds: 'passed', minimumChangedPixelsPer400ms: minimumChangedPixels,
     tabSilenceStopMs, recordingSilenceStopMs, exactSilentFrameHold: 'passed', capturedPauseResumeExport: 'passed',
     videoAudioExport: 'passed', portraitWaveform: 'passed', permissionRecovery: 'passed',

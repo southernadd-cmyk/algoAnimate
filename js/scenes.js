@@ -119,7 +119,7 @@ export class AnimatedArtwork {
     this.layers.push(this.layer(scene, age));
     this.layers = this.layers.slice(-3); this.turns++;
   }
-  draw(features, dt, response = 0.6, gentle = false, cycle = 4, flowing = features.active) {
+  draw(features, dt, response = 0.6, gentle = false, cycle = 4, flowing = features.active, { paper = true, opacity = 1 } = {}) {
     if (!this.current) return;
     this.flowing = flowing;
     const memory = gentle ? 0.8 : 0.7;
@@ -146,18 +146,20 @@ export class AnimatedArtwork {
     }
     const ctx = this.context, scene = this.activeLayer?.scene || this.current;
     ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
-    ctx.fillStyle = scene.paper; ctx.fillRect(0, 0, scene.width, scene.height);
-    ctx.globalAlpha = 0.035;
-    for (const mark of scene.paperMarks) {
-      ctx.fillStyle = mark.colour; ctx.fillRect(mark.x, mark.y, mark.w, mark.h);
+    if (paper) {
+      ctx.fillStyle = scene.paper; ctx.fillRect(0, 0, scene.width, scene.height);
+      ctx.globalAlpha = 0.035;
+      for (const mark of scene.paperMarks) {
+        ctx.fillStyle = mark.colour; ctx.fillRect(mark.x, mark.y, mark.w, mark.h);
+      }
     }
     ctx.globalAlpha = 1;
     this.stats = { progress: this.activeLayer?.age || 0, penTips: 0, visiblePaths: 0, inkLength: 0 };
-    if (this.layers.length) for (const layer of this.layers) this.drawLayer(layer, features, response, gentle, memory);
-    else this.drawLayer(this.layer(this.current, 0, true), features, 0, gentle, memory, true);
+    if (this.layers.length) for (const layer of this.layers) this.drawLayer(layer, features, response, gentle, memory, false, opacity);
+    else this.drawLayer(this.layer(this.current, 0, true), features, 0, gentle, memory, true, opacity);
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
   }
-  drawLayer(layer, features, response, gentle, memory, still = false) {
+  drawLayer(layer, features, response, gentle, memory, still = false, opacity = 1) {
     const ctx = this.context, scene = layer.scene;
     for (let i = 0; i < scene.paths.length; i++) {
       const entry = scene.paths[i], timing = scene.schedule[i];
@@ -174,11 +176,13 @@ export class AnimatedArtwork {
       }
       ctx.strokeStyle = entry.stroke;
       ctx.lineWidth = entry.width * layer.pressure[i];
-      ctx.globalAlpha = clamp(entry.opacity);
+      ctx.globalAlpha = clamp(entry.opacity) * opacity;
       ctx.lineCap = entry.lineCap || 'round'; ctx.lineJoin = 'round';
       ctx.globalCompositeOperation = entry.blend || 'source-over';
       ctx.setLineDash(entry.dash || []);
       ctx.lineDashOffset = (entry.dashOffset || 0) + from * entry.geometry.length;
+      const transform = entry.transform?.match(/^matrix\(([^)]+)\)$/)?.[1].trim().split(/[ ,]+/).map(Number);
+      if (transform?.length === 6 && transform.every(Number.isFinite)) { ctx.save(); ctx.transform(...transform); }
       if (from === 0 && to === 1) ctx.stroke(entry.path);
       else {
         ctx.beginPath();
@@ -189,6 +193,7 @@ export class AnimatedArtwork {
         }
         ctx.stroke();
       }
+      if (transform?.length === 6 && transform.every(Number.isFinite)) ctx.restore();
       this.stats.visiblePaths++;
       this.stats.inkLength += (to - from) * entry.geometry.length;
       if (!layer.preview && to > 0 && to < 1) this.stats.penTips++;
