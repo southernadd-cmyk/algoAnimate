@@ -54,7 +54,12 @@ export class RoutedSound {
   }
 }
 
-export function ensembleSettings(route, seed, orientation, palette, density = 25, style = null, profile = null) {
+// Ignore small fluctuations and all measurements outside the route.
+export function profileShift(previous, current, inputs, threshold = 0.15) {
+  if (!previous || !current) return false;
+  return inputs.some(key => Math.abs(clamp(previous[key] ?? 0) - clamp(current[key] ?? 0)) >= threshold);
+}
+export function ensembleSettings(route, seed, orientation, palette, density = 25, style = null, profile = null, phase = 0) {
   const amount = clamp(density / 100);
   const owns = key => route.inputs.includes(key);
   const energy = profile ? clamp(profile.level) : 0.5;
@@ -75,7 +80,7 @@ export function ensembleSettings(route, seed, orientation, palette, density = 25
     rotation: profile && owns('flux') ? 24 + 72 * onsets : DEFAULT_SETTINGS.rotation,
     elementScale: profile && owns('bass') ? 0.72 + 0.72 * bass : 1,
     // Eight disjoint lanes of one golden-angle sequence, on the whole paper.
-    interlock: { lane: ENGINE_ROUTES.findIndex(item => item.id === route.id), lanes: ENGINE_ROUTES.length },
+    interlock: { lane: ENGINE_ROUTES.findIndex(item => item.id === route.id), lanes: ENGINE_ROUTES.length, phase },
     audioControls,
     // Supporting frames get a bounded mark budget. Expressive voices unfold
     // in longer phrases; each still reads only its own assigned sound inputs.
@@ -100,11 +105,12 @@ export class LayeredArtwork {
     this.entrySeconds = 0;
     this.entryFinished = false;
     this.entryNextSlot = 0;
+    this.layoutTime = 0; // Seconds of audible performance; stops advancing in silence.
     this.solo = null;
     this.voices = ENGINE_ROUTES.map(route => ({ route, art: new AnimatedArtwork(canvas),
       muted: false,
       sound: new RoutedSound(route), flowing: false, building: false, generation: 0,
-      pendingStyle: null, requestedSeed: 'SOUND-READY', firstSoundSeed: true,
+      pendingStyle: null, requestedSeed: 'SOUND-READY', firstSoundSeed: true, lastCompositionProfile: null,
       entrySlot: null, lastSceneTime: -1 }));
   }
   enabled(voice) { return !voice.muted && (!this.solo || this.solo === voice.route.id); }
@@ -138,6 +144,7 @@ export class LayeredArtwork {
     for (const voice of this.voices) {
       voice.generation++; voice.building = false; voice.pendingStyle = null; voice.art.discardQueued();
       voice.sound.reset(); voice.firstSoundSeed = true; voice.lastSceneTime = -1;
+      voice.lastCompositionProfile = null;
       voice.requestedSeed = voice.art.drawnSeed || 'SOUND-READY';
     }
   }
@@ -150,6 +157,7 @@ export class LayeredArtwork {
       voice.generation++; voice.building = false; voice.pendingStyle = null;
       voice.art.clearInk(); voice.sound.reset(); voice.flowing = false;
       voice.firstSoundSeed = true; voice.lastSceneTime = -1;
+      voice.lastCompositionProfile = null;
       voice.requestedSeed = voice.art.drawnSeed || 'SOUND-READY';
     }
   }
@@ -167,6 +175,7 @@ export class LayeredArtwork {
     }
   }
   updateSignals(features, dt, available) {
+    if (available && features.active) this.layoutTime += dt;
     const stopped = [];
     for (const voice of this.voices) {
       voice.flowing = voice.sound.update(features, dt, available && this.enabled(voice));

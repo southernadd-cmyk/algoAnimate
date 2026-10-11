@@ -155,20 +155,28 @@ Sound also steers continuous composition controls through a 0.75-second phrase
 envelope: bass increases shape scale and nesting, brightness and treble move
 line gestures from curves toward straight edges, onsets increase shape accents,
 rotation and broken strokes, and each route's energy adjusts its element budget
-and ink retention. A route uses only its assigned inputs. Density still limits
-the whole ensemble. Settings latch at drawing boundaries; existing strokes keep
-their geometry and pressure. Similar sound steers similar controls, while hashed
+and ink retention. **Energy means each route's own assigned inputs**, not always
+volume: Constructed Forms uses brightness, Connected Fields uses onsets, and
+combination routes average their assigned features. Unassigned channels never
+steer that voice's composition. Density still limits the whole ensemble.
+Substantial changes in the smoothed assigned signal (at least 0.15) request a
+new composition early, with a 1.25-second cooldown; small variations wait for
+the normal cycle. Existing strokes keep their geometry and pressure, and an
+early refresh becomes visible only after the new scene builds and begins its
+ink handoff. Similar sound steers similar controls, while hashed
 seeds still provide variation; this is not semantic recognition of instruments.
 The animation adapter keeps continuous controls and ink choices out of the
 native renderer's additional settings hash, so they steer the same random
 sequence instead of scrambling it again with every small parameter change.
 
-The engines share interleaved candidate anchors in one golden-angle sequence:
-voice 0 takes slots 0, 8, 16; voice 1 takes 1, 9, 17, and so on. Focal and
-territory helpers use the same scaffold across the whole paper in both
-orientations. Native recursive divisions and long gestures retain their own
-structure and can cross other voices; this reduces repeated anchor hotspots
-rather than guaranteeing collision-free compositions or a single golden outline.
+The engines share a fixed 128-slot-per-lane golden-angle scaffold.
+Each voice samples its own interleaved lane (0, 8, 16… versus 1, 9, 17…);
+variable element counts choose different subsets without redefining the
+spiral's radius for other voices. The shared layout turns one golden angle
+per **minute of active sound**, freezing during pauses and silence. Each new
+composition snapshots that phase, so marks already on the paper never rotate
+or jump. Native divisions and long gestures still cross lanes: these are
+disjoint candidate anchors, not collision-free ink territories.
 
 Each drawing's sound seed and route also choose its ink kit from 16 pen/nib
 profiles and 16 colour families, with no unseeded session randomness. Current,

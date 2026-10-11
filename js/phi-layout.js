@@ -1,19 +1,26 @@
 const PHI = (1 + Math.sqrt(5)) / 2;
 export const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 
-// Interleave voices as lane, lane+8, lane+16... in one sunflower sequence.
-// No seed-dependent phase: a shared scaffold stays put as the sound changes.
-export function goldenLanePoint(width, height, index, count, lane, lanes = 8) {
-  const slot = index * lanes + lane;
-  const progress = Math.min(1, (slot + 0.65) / (Math.max(1, count) * lanes));
-  const radial = progress ** (1 / PHI), angle = slot * GOLDEN_ANGLE;
+// Every engine samples its own slots from one fixed interleaved sunflower.
+// Unlike an engine-local spiral, element count changes don't rescale anchors.
+export const GOLDEN_SCAFFOLD_SLOTS = 128;
+export const GOLDEN_ROTATION_SECONDS = 60;
+export function goldenRotationPhase(activeSeconds) {
+  return GOLDEN_ANGLE * Math.max(0, activeSeconds) / GOLDEN_ROTATION_SECONDS;
+}
+export function goldenLanePoint(width, height, index, count, lane, lanes = 8, phase = 0) {
+  const fraction = Math.max(0, Math.min(1, (index + 0.5) / Math.max(1, count)));
+  const sample = Math.min(GOLDEN_SCAFFOLD_SLOTS - 1, Math.floor(fraction * GOLDEN_SCAFFOLD_SLOTS));
+  const slot = sample * lanes + lane;
+  const progress = (slot + 0.65) / (GOLDEN_SCAFFOLD_SLOTS * lanes);
+  const radial = progress ** (1 / PHI), angle = slot * GOLDEN_ANGLE + phase;
   return { x: width * (0.5 + Math.cos(angle) * 0.465 * radial),
-    y: height * (0.5 + Math.sin(angle) * 0.455 * radial), a: angle, rad: radial };
+    y: height * (0.5 + Math.sin(angle) * 0.455 * radial), a: angle, rad: radial, slot };
 }
 
 export function interlockRenderer(A, settings) {
   if (!settings.interlock) return () => {};
-  const { lane, lanes } = settings.interlock;
+  const { lane, lanes, phase = 0 } = settings.interlock;
   const originals = new Map();
   const replace = (name, method) => { if (A[name]) { originals.set(name, A[name]); A[name] = method; } };
   const makeR = A.makeR;
@@ -27,7 +34,7 @@ export function interlockRenderer(A, settings) {
     }
     return makeR.call(this, seed);
   });
-  const point = (i, count) => goldenLanePoint(A.W, A.H, i, count, lane, lanes);
+  const point = (i, count) => goldenLanePoint(A.W, A.H, i, count, lane, lanes, phase);
   let focal = 0;
   const phiPoint = A.phiPoint;
   replace('phiPoint', function (s, random) {

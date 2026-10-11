@@ -1,7 +1,8 @@
 import { AudioInput, describeCaptureError } from './audio.js';
 import { FeatureTracker, SoundGate, SILENCE, clamp, evolutionInterval } from './features.js';
 import { SceneBuilder, DEFAULT_SETTINGS } from './scenes.js';
-import { LayeredArtwork, ensembleSettings } from './ensemble.js';
+import { LayeredArtwork, ensembleSettings, profileShift } from './ensemble.js';
+import { goldenRotationPhase } from './phi-layout.js';
 import { VideoRecorder, MAX_TAKE_SECONDS } from './recording.js';
 import { StyleDeck, styleSettings } from './styles.js';
 import { BandMeters, SpectralChangeMeter, BAND_KEYS, meterLevel } from './meters.js';
@@ -351,7 +352,8 @@ player.addEventListener('error', () => {
 });
 
 function settings(voice, seed, style) {
-  return ensembleSettings(voice.route, seed, $('orientation').value, 'marker', +$('density').value, style, voice.sound.profile);
+  return ensembleSettings(voice.route, seed, $('orientation').value, 'marker', +$('density').value,
+    style, voice.sound.profile, goldenRotationPhase(artwork.layoutTime));
 }
 async function generateAll(immediate = false) {
   const request = ++layoutGeneration; preparing = true;
@@ -360,6 +362,7 @@ async function generateAll(immediate = false) {
   }
   syncControls();
   try {
+    const snapshots = artwork.voices.map(voice => voice.sound.profile && { ...voice.sound.profile });
     const scenes = await Promise.all(artwork.voices.map(voice => {
       const style = voice.art.drawnStyle ? styleDeck.withMood(voice.art.drawnStyle, $('palette').value)
         : styleDeck.next(artwork.voices, $('palette').value, voice.sound.seed, voice.route.id, voice.sound.profile);
@@ -370,6 +373,7 @@ async function generateAll(immediate = false) {
     if (request !== layoutGeneration) return;
     if (scenes.some(scene => !scene.paths.length)) throw new Error('A layer did not produce any marker paths.');
     artwork.setScenes(scenes, immediate);
+    artwork.voices.forEach((voice, index) => { voice.lastCompositionProfile = snapshots[index]; });
     $('stage').classList.toggle('portrait', scenes[0].height > scenes[0].width);
     $('dimensions').textContent = scenes[0].width + ' × ' + scenes[0].height;
   } catch (error) {
@@ -382,6 +386,7 @@ async function generateAll(immediate = false) {
   }
 }
 async function generateVoice(voice, seed) {
+  const snapshot = voice.sound.profile && { ...voice.sound.profile };
   const style = styleDeck.next(artwork.voices, $('palette').value, seed, voice.route.id, voice.sound.profile);
   if (!style) return;
   const request = ++voice.generation, layout = layoutGeneration;
@@ -391,6 +396,7 @@ async function generateVoice(voice, seed) {
     if (request !== voice.generation || layout !== layoutGeneration || !voice.flowing || !artwork.enabled(voice)) return;
     if (!scene.paths.length) throw new Error(voice.route.name + ' did not produce any marker paths.');
     voice.art.setScene(scene, false, voice.firstSoundSeed);
+    voice.lastCompositionProfile = snapshot;
     voice.firstSoundSeed = false;
   } catch (error) {
     if (request === voice.generation) {
@@ -629,7 +635,10 @@ function frame(now) {
     const seed = voice.sound.seed;
     if (!preparing && voice.flowing && voice.sound.features.active && !voice.building && seed !== 'SOUND-READY'
       && (!voice.firstSoundSeed || artwork.entryFinished)
-      && (voice.firstSoundSeed || voice.art.needsScene(cycle, $('gentle').checked))
+      && (voice.firstSoundSeed || voice.art.needsScene(cycle, $('gentle').checked)
+        || (artwork.entryFinished && !voice.art.queued
+          && clock - voice.lastSceneTime >= 1.25
+          && profileShift(voice.lastCompositionProfile, voice.sound.profile, voice.route.inputs)))
       && clock - voice.lastSceneTime >= 0.25) {
       voice.lastSceneTime = clock; generateVoice(voice, seed);
     }

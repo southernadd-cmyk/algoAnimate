@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ENGINE_ROUTES, RoutedSound, ensembleSettings } from '../js/ensemble.js';
+import { ENGINE_ROUTES, RoutedSound, ensembleSettings, profileShift } from '../js/ensemble.js';
 import { StyleDeck } from '../js/styles.js';
 import { SILENCE } from '../js/features.js';
-import { goldenLanePoint, interlockRenderer, GOLDEN_ANGLE } from '../js/phi-layout.js';
+import { goldenLanePoint, interlockRenderer, GOLDEN_ANGLE, goldenRotationPhase, GOLDEN_SCAFFOLD_SLOTS } from '../js/phi-layout.js';
 import { centroidReading } from '../js/listening.js';
 import { pngWithDpi } from '../js/png.js';
 import { readFileSync } from 'node:fs';
@@ -36,6 +36,39 @@ test('phrase profiles and composition controls ignore unrelated sound and hold d
     const held = a.profile; a.update(SILENCE, 1, false); assert.deepEqual(a.profile, held);
   }
 });
+test('composition parameters and early refresh depend only on each engine assigned inputs', () => {
+  const keys = ['level', 'bass', 'mid', 'treble', 'centroid', 'flux'];
+  for (const route of ENGINE_ROUTES) {
+    const base = profile(0.3), unrelated = { ...base };
+    for (const key of keys) if (!route.inputs.includes(key)) unrelated[key] = 1;
+    const own = { ...base, [route.inputs[0]]: 0.8 };
+    const build = p => ensembleSettings(route, 'FIXED', 'landscape', 'marker', 50, null, p);
+    assert.deepEqual(build(base), build(unrelated), route.id + ' ignores other channels');
+    assert.equal(profileShift(base, unrelated, route.inputs), false);
+    assert.equal(profileShift(base, own, route.inputs), true);
+    assert.notDeepEqual(build(base), build(own), route.id + ' responds to its own feature');
+    assert.equal(profileShift(base, { ...base, [route.inputs[0]]: 0.36 }, route.inputs), false);
+  }
+});
+
+test('unequal engine counts use disjoint fixed golden-angle slots, which rotate only with active time', () => {
+  const lanes = ENGINE_ROUTES.length, counts = [3, 5, 7, 9, 12, 17, 24, 37];
+  const seen = new Set();
+  for (let lane = 0; lane < lanes; lane++) for (let i = 0; i < counts[lane]; i++) {
+    const point = goldenLanePoint(1400, 1000, i, counts[lane], lane, lanes);
+    assert.ok(!seen.has(point.slot), 'fixed shared slots must be disjoint across voices');
+    seen.add(point.slot);
+    assert.ok(point.slot < GOLDEN_SCAFFOLD_SLOTS * lanes);
+  }
+  assert.equal(seen.size, counts.reduce((sum, n) => sum + n, 0));
+  const start = goldenLanePoint(1400, 1000, 3, 8, 0, lanes);
+  const later = goldenLanePoint(1400, 1000, 3, 8, 0, lanes, goldenRotationPhase(60));
+  assert.ok(Math.abs(later.a - start.a - GOLDEN_ANGLE) < 1e-9);
+  assert.equal(later.rad, start.rad);
+  assert.notDeepEqual([later.x, later.y], [start.x, start.y]);
+  assert.equal(goldenRotationPhase(-10), goldenRotationPhase(0));
+});
+
 test('sound-seeded kits repeat across sessions while eight reservations remain distinct', () => {
   function kits(sessionSeed, soundSeed) {
     const deck = new StyleDeck(sessionSeed), voices = ENGINE_ROUTES.map(route => ({ route, art: {} }));
