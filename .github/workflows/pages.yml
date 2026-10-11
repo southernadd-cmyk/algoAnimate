@@ -31,7 +31,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: v0.12-smoke-test
+          name: v0.13-smoke-test
           path: test-results/
           if-no-files-found: ignore
   deploy:

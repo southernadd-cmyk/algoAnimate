@@ -7,6 +7,10 @@ import { StyleDeck, styleSettings } from './styles.js';
 import { BandMeters, SpectralChangeMeter, BAND_KEYS, meterLevel } from './meters.js';
 import { FrameClock } from './frame-clock.js';
 import { DemoPlaylist, DEMO_TRACKS } from './demo.js';
+import { captureSheet, paintSheet, sheetSVG } from './export.js';
+import { ScoreCapture, ScoreReplay, parseScore, MAX_SCORE_BYTES } from './scores.js';
+import { ScreenAwake, shortcut } from './performance.js';
+import { ListeningOverlay } from './listening.js';
 
 const $ = id => document.getElementById(id);
 const art = $('art'), waveform = $('waveform'), player = $('filePlayer'), demoPlayer = $('demoPlayer');
@@ -25,9 +29,18 @@ let layoutGeneration = 0, preparing = false;
 let clock = 0, previousFrame = 0, uiTime = 0, onsetUntil = 0, clearHoldUntil = 0;
 let frames = 0, fpsStart = performance.now(), fps = 0, recordingWithWaveform = false;
 let startRecordPending = false, demoSwitching = false;
+let drawingPaused = false, performanceMode = false, performanceTimer = null;
+let scoreCapture = null, scoreData = null, replay = null, scoreTakeStarted = null;
 const waveHistory = [];
+const listening = new ListeningOverlay($('listeningOverlay'), artwork.voices.map(voice => voice.route));
+const awake = new ScreenAwake(status => {
+  const text = { awake: 'Screen kept awake', off: 'Screen wake lock off', released: 'Screen wake lock released', unavailable: 'Screen wake lock unavailable' }[status];
+  $('wakeStatus').textContent = text;
+  $('performanceStatus').textContent = (recorder.active ? '● Recording · ' : '') + text;
+});
 const names = { tab: 'Browser tab audio', microphone: 'Microphone', demo: 'Lo-fi demo' };
-const layerControls = artwork.voices.map(({ route }) => {
+const layerControls = artwork.voices.map(voice => {
+  const { route } = voice;
   const row = document.createElement('div'); row.className = 'engine-row'; row.dataset.engine = route.id;
   const heading = document.createElement('div'); heading.className = 'engine-title';
   const title = document.createElement('strong'); title.textContent = route.name;
@@ -45,8 +58,19 @@ const layerControls = artwork.voices.map(({ route }) => {
   const meter = document.createElement('meter'); meter.min = 0; meter.max = 1; meter.value = 0;
   meter.setAttribute('aria-label', route.name + ' response to ' + route.label);
   meter.title = route.label + ' input response';
-  row.append(heading, label, sample, kit, meter); $('engineLayers').append(row);
-  return { row, meter, state, sample, swatches, palette, pen, styleToken: null };
+  const mix = document.createElement('div'); mix.className = 'engine-mix';
+  const solo = document.createElement('button'), mute = document.createElement('button');
+  for (const [button, action] of [[solo, 'Solo'], [mute, 'Mute']]) {
+    button.type = 'button'; button.textContent = action;
+    button.setAttribute('aria-label', action + ' ' + route.name); button.setAttribute('aria-pressed', 'false');
+  }
+  const toggleSolo = () => { if (replay) return; artwork.toggleSolo(route.id); syncMix(); };
+  solo.addEventListener('click', toggleSolo);
+  mute.addEventListener('click', () => { if (replay) return; artwork.toggleMute(route.id); syncMix(); });
+  row.addEventListener('click', event => { if (!event.target.closest('button')) toggleSolo(); });
+  row.setAttribute('role', 'group'); row.setAttribute('aria-label', route.name + ' drawing voice');
+  mix.append(solo, mute); row.append(heading, label, sample, kit, meter, mix); $('engineLayers').append(row);
+  return { row, meter, state, sample, swatches, palette, pen, solo, mute, styleToken: null };
 });
 const isBuilding = () => preparing || artwork.voices.some(voice => voice.building);
 
@@ -62,7 +86,7 @@ function formatTime(seconds) {
 function fileStamp() { return new Date().toISOString().replace(/[-:]/g, '').slice(0, 15).replace('T', '-'); }
 
 const recorder = new VideoRecorder({
-  onChange: () => { syncControls(); updateTake(); },
+  onChange: () => { syncScoreCapture(); syncControls(); updateTake(); },
   onError: error => message(error.message, true)
 });
 const audio = new AudioInput({ onEnded: () => disconnect(true) });
@@ -79,8 +103,140 @@ const demoPlaylist = new DemoPlaylist(demoPlayer, {
   }
 });
 
+function syncMix() {
+  layerControls.forEach((controls, index) => {
+    const voice = artwork.voices[index];
+    controls.solo.setAttribute('aria-pressed', String(artwork.solo === voice.route.id));
+    controls.mute.setAttribute('aria-pressed', String(voice.muted));
+    controls.solo.disabled = controls.mute.disabled = Boolean(replay);
+    controls.row.classList.toggle('is-muted', !artwork.enabled(voice));
+    controls.row.classList.toggle('is-solo', artwork.solo === voice.route.id);
+  });
+}
+
+function syncScoreCapture() {
+  if (recorder.active && scoreTakeStarted !== recorder.started) {
+    scoreTakeStarted = recorder.started;
+    scoreData = null; scoreCapture = new ScoreCapture(recorder.started, sourceLabel);
+    scoreCapture.capture(recorder.started, artwork, features, $('gentle').checked);
+  } else if (!recorder.active && scoreCapture) finishScore();
+}
+function finishScore() {
+  scoreData = scoreCapture?.finish() || scoreData; scoreCapture = null; syncScoreControls();
+}
+function syncScoreControls() {
+  const busy = recorder.busy || pending || startRecordPending || preparing;
+  $('saveScore').disabled = !scoreData;
+  $('loadScore').disabled = busy;
+  $('replayScore').disabled = busy || !scoreData;
+  $('scoreTransport').hidden = !replay;
+  $('scoreInfo').textContent = scoreCapture ? 'Capturing the score with this take…'
+    : scoreData ? formatTime(scoreData.duration / 1000) + ' · ' + scoreData.frames.length + ' frames · replay without audio'
+      : 'Every take also captures a score. Replay the ink without audio.';
+  for (const id of ['palette', 'density', 'evolution', 'sensitivity', 'motion', 'smoothing', 'gentle']) $(id).disabled = Boolean(replay);
+}
+function setSheetSize(sheet) {
+  if (art.width !== sheet.width) art.width = sheet.width;
+  if (art.height !== sheet.height) art.height = sheet.height;
+  $('stage').classList.toggle('portrait', sheet.height > sheet.width);
+  $('dimensions').textContent = sheet.width + ' × ' + sheet.height;
+}
+function leaveScoreReplay() {
+  if (!replay) return;
+  replay = null; document.body.classList.remove('replaying');
+  if (artwork.paperScene) setSheetSize(artwork.paperScene);
+  features = SILENCE; bandMeters.reset(); changeMeter.reset(); previousFrame = 0;
+  syncControls();
+}
+function beginScoreReplay() {
+  if (!scoreData || recorder.busy || pending || preparing) return;
+  try {
+    if (!scoreData.validated) scoreData = parseScore(JSON.stringify(scoreData));
+    audio.stop(); artwork.resetSound(); soundGate.reset();
+    replay = new ScoreReplay(scoreData); drawingPaused = false;
+    document.body.classList.add('replaying'); $('scoreSeek').max = scoreData.duration;
+    setSheetSize(replay.sheet()); paintSheet(artwork.context, replay.sheet()); previousFrame = 0;
+    syncControls(); message('Replaying the recorded score. No audio is needed. Seek to any frame and export it.');
+  } catch (error) { message('Score could not be replayed: ' + error.message, true); }
+}
+$('saveScore').addEventListener('click', () => {
+  if (scoreData) downloadBlob(new Blob([JSON.stringify(scoreData)], { type: 'application/json' }), `algoanimate-score-${fileStamp()}.json`);
+});
+$('loadScore').addEventListener('click', () => $('scoreInput').click());
+$('scoreInput').addEventListener('change', async event => {
+  const file = event.target.files?.[0]; event.target.value = '';
+  if (!file || recorder.busy || pending) return;
+  try {
+    if (file.size > MAX_SCORE_BYTES) throw new Error('Scores must be smaller than 20 MB.');
+    const loaded = parseScore(await file.text());
+    if (recorder.busy || pending) return;
+    scoreData = loaded; beginScoreReplay();
+  } catch (error) { message('Score could not be loaded: ' + error.message, true); }
+});
+$('replayScore').addEventListener('click', beginScoreReplay);
+$('leaveReplay').addEventListener('click', leaveScoreReplay);
+$('scoreRestart').addEventListener('click', () => { if (replay) { replay.seek(0); replay.paused = false; syncControls(); } });
+$('scoreSeek').addEventListener('input', () => { if (replay) { replay.seek(+$('scoreSeek').value); replay.paused = true; } });
+$('scorePause').addEventListener('click', () => { if (replay) { if (replay.time >= replay.score.duration) replay.seek(0); replay.paused = !replay.paused; syncControls(); } });
+$('pauseDrawing').addEventListener('click', () => {
+  if (replay) { $('scorePause').click(); return; }
+  drawingPaused = !drawingPaused; syncControls();
+});
+$('listen').addEventListener('click', () => {
+  $('listeningOverlay').hidden = !$('listeningOverlay').hidden;
+  $('listen').setAttribute('aria-pressed', String(!$('listeningOverlay').hidden));
+  if (!$('listeningOverlay').hidden) listening.update(features, replay ? replay.engines : artwork.diagnostics(), Boolean(replay));
+});
+
+function showPerformanceControls() {
+  if (!performanceMode) return;
+  $('performanceControls').classList.add('show-controls'); clearTimeout(performanceTimer);
+  performanceTimer = setTimeout(() => $('performanceControls').classList.remove('show-controls'), 2500);
+}
+function setPerformance(active) {
+  performanceMode = active; document.body.classList.toggle('performance', active);
+  $('performance').setAttribute('aria-pressed', String(active));
+  $('performanceControls').hidden = !active;
+  if (active) { $('stage').tabIndex = -1; $('stage').focus({ preventScroll: true }); showPerformanceControls(); }
+  else { clearTimeout(performanceTimer); $('performance').focus({ preventScroll: true }); }
+  syncControls();
+}
+$('performance').addEventListener('click', () => {
+  setPerformance(true);
+  // Fullscreen must be requested in the click itself to retain user activation.
+  if (!document.fullscreenElement) $('stage').requestFullscreen?.().catch(() => {});
+});
+$('exitPerformance').addEventListener('click', () => { setPerformance(false); if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); });
+for (const [id, target] of [['performancePause', 'pauseDrawing'], ['performanceClear', 'clearCanvas'], ['performanceListen', 'listen']]) {
+  $(id).addEventListener('click', () => $(target).click());
+}
+$('performanceRecord').addEventListener('click', () => $(recorder.busy ? 'stopRecording' : 'record').click());
+$('stage').addEventListener('pointermove', showPerformanceControls);
+$('stage').addEventListener('pointerdown', showPerformanceControls);
+document.addEventListener('fullscreenchange', () => {
+  if (!performanceMode) return;
+  if (!document.fullscreenElement) setPerformance(false);
+  else $('stage').focus({ preventScroll: true });
+});
+document.addEventListener('keydown', event => {
+  if ($('previewDialog').open) return;
+  if (event.key === 'Escape' && performanceMode) { $('exitPerformance').click(); return; }
+  const action = shortcut(event); if (!action) return;
+  event.preventDefault(); showPerformanceControls();
+  $(action === 'record' && recorder.busy ? 'stopRecording' : action).click();
+});
+
 function syncControls() {
   frameClock.setRecording(recorder.active);
+  awake.setWanted(performanceMode || recorder.active);
+  syncScoreControls();
+  syncMix();
+  $('pauseDrawing').textContent = replay ? replay.paused ? 'Resume replay' : 'Pause replay'
+    : drawingPaused ? 'Resume drawing' : 'Pause drawing';
+  $('pauseDrawing').setAttribute('aria-pressed', String(replay ? replay.paused : drawingPaused));
+  $('performancePause').textContent = replay ? replay.paused ? 'Resume replay' : 'Pause replay'
+    : drawingPaused ? 'Resume drawing' : 'Pause drawing';
+  $('performanceRecord').textContent = recorder.busy ? 'Stop recording' : 'Record';
   const locked = pending || recorder.busy || startRecordPending;
   const demoLoading = demoPlaylist.loading || (pending && pendingSource === names.demo);
   $('connectTab').disabled = locked || !navigator.mediaDevices?.getDisplayMedia;
@@ -90,9 +246,9 @@ function syncControls() {
   $('playDemo').disabled = locked || demoLoading;
   $('playDemo').setAttribute('aria-busy', String(demoLoading));
   $('stopAudio').disabled = !audio.kind || pending || startRecordPending;
-  $('orientation').disabled = recorder.busy || startRecordPending;
+  $('orientation').disabled = recorder.busy || startRecordPending || Boolean(replay);
   $('includeWaveform').disabled = recorder.busy || startRecordPending;
-  $('record').disabled = !audio.kind || !recorder.mimeType || !artwork.ready || locked || preparing;
+  $('record').disabled = Boolean(replay) || !audio.kind || !recorder.mimeType || !artwork.ready || locked || preparing;
   $('record').hidden = recorder.busy;
   $('stopRecording').hidden = !recorder.busy;
   $('stopRecording').disabled = Boolean(recorder.stopping);
@@ -123,6 +279,7 @@ function resetSound() {
 
 async function connect(action, label) {
   if (pending || recorder.busy || startRecordPending) return;
+  leaveScoreReplay(); drawingPaused = false;
   pending = true; pendingSource = label; message(''); syncControls();
   try {
     // action() is invoked synchronously so tab capture retains user activation.
@@ -230,7 +387,7 @@ async function generateVoice(voice, seed) {
   voice.requestedSeed = seed; voice.building = true; voice.pendingStyle = style;
   try {
     const scene = await builder.build(settings(voice, seed, style));
-    if (request !== voice.generation || layout !== layoutGeneration || !voice.flowing) return;
+    if (request !== voice.generation || layout !== layoutGeneration || !voice.flowing || !artwork.enabled(voice)) return;
     if (!scene.paths.length) throw new Error(voice.route.name + ' did not produce any marker paths.');
     voice.art.setScene(scene, false, voice.firstSoundSeed);
     voice.firstSoundSeed = false;
@@ -243,7 +400,7 @@ async function generateVoice(voice, seed) {
 }
 for (const id of ['orientation', 'palette', 'density']) {
   $(id).addEventListener('change', () => {
-    if (id === 'orientation' && recorder.busy) return;
+    if (replay || (id === 'orientation' && recorder.busy)) return;
     generateAll(id === 'orientation' || !soundGate.open);
   });
 }
@@ -327,16 +484,34 @@ function closePreview() { $('recordingPreview').pause(); $('previewDialog').clos
 $('closePreview').addEventListener('click', closePreview);
 $('previewDialog').addEventListener('close', () => $('recordingPreview').pause());
 $('previewDialog').addEventListener('click', event => { if (event.target === $('previewDialog')) closePreview(); });
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob), link = document.createElement('a');
+  link.href = url; link.download = filename; link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
 $('snapshot').addEventListener('click', () => {
-  if (!artwork.current) return;
-  art.toBlob(blob => {
-    if (!blob) { message('The frame could not be exported.', true); return; }
-    const url = URL.createObjectURL(blob), link = document.createElement('a');
-    link.href = url; link.download = `algoanimate-ensemble-${fileStamp()}.png`;
-    link.click(); setTimeout(() => URL.revokeObjectURL(url), 30000);
-  }, 'image/png');
+  if (!artwork.current || preparing) return;
+  try {
+    const format = $('exportFormat').value;
+    const sheet = replay ? replay.sheet() : captureSheet(artwork, $('gentle').checked);
+    if (format === 'svg') {
+      downloadBlob(new Blob([sheetSVG(sheet)], { type: 'image/svg+xml' }), `algoanimate-${fileStamp()}.svg`); return;
+    }
+    const canvas = format === 'print' ? document.createElement('canvas') : art;
+    if (format === 'print') {
+      canvas.width = sheet.width * 3; canvas.height = sheet.height * 3;
+      paintSheet(canvas.getContext('2d', { alpha: false }), sheet, 3);
+    }
+    canvas.toBlob(blob => {
+      if (blob) downloadBlob(blob, `algoanimate-${fileStamp()}${format === 'print' ? '-3x' : ''}.png`);
+      else message('The frame could not be exported.', true);
+      // Release the large print surface as soon as PNG encoding finishes.
+      if (format === 'print') { canvas.width = 1; canvas.height = 1; }
+    }, 'image/png');
+  } catch (error) { message('Export failed: ' + error.message, true); }
 });
 $('clearCanvas').addEventListener('click', () => {
+  if (replay) { message('Return to live drawing to clear the canvas.'); return; }
   artwork.clearInk();
   // A one-second hold made each sound restart look like a blank page.
   // Clear immediately, then start the first new visible stroke on the next frame.
@@ -357,15 +532,15 @@ $('fullscreen').addEventListener('click', async () => {
 
 function updateUI(now) {
   $('clearCanvas').textContent = now < clearHoldUntil ? 'Canvas cleared ✓' : 'Clear canvas ↺';
-  const active = Boolean(audio.kind);
+  const active = Boolean(audio.kind) || Boolean(replay);
   const paused = Boolean(audio.mediaElement?.paused);
-  const label = recorder.active ? 'RECORDING' : paused ? 'AUDIO PAUSED' : active && soundGate.open
+  const label = replay ? replay.paused ? 'SCORE · HELD' : 'SCORE · REPLAYING' : drawingPaused ? 'DRAWING PAUSED' : recorder.active ? 'RECORDING' : paused ? 'AUDIO PAUSED' : active && soundGate.open
     ? 'DRAWING · LIVE SOUND' : active ? 'SILENT · DRAWING PAUSED' : 'WAITING FOR SOUND';
   $('liveLabel').lastChild.textContent = label;
   $('liveLabel').classList.toggle('live', active && soundGate.open && !recorder.active);
   $('liveLabel').classList.toggle('recording', recorder.active);
   const decibels = features.rms > 1e-7 ? Math.max(-99, Math.round(20 * Math.log10(features.rms))) + ' dBFS' : 'SILENCE';
-  $('signalInfo').textContent = active ? decibels + ' / ' + (audio.context.sampleRate / 1000).toFixed(1) + ' kHz' : 'CONNECT A SOURCE TO BEGIN';
+  $('signalInfo').textContent = replay ? decibels + ' / RECORDED FEATURES' : active ? decibels + ' / ' + (audio.context.sampleRate / 1000).toFixed(1) + ' kHz' : 'CONNECT A SOURCE TO BEGIN';
   for (const key of BAND_KEYS) {
     const band = bandMeters.bands[key];
     const text = band.db === null || band.db < -60 ? '—' : Math.round(band.db) + ' dB';
@@ -375,9 +550,9 @@ function updateUI(now) {
   }
   $('beat').classList.toggle('lit', now < onsetUntil);
   $('fps').textContent = String(fps || '—');
-  $('seed').textContent = artwork.drawnSeed || DEFAULT_SETTINGS.seed;
+  $('seed').textContent = replay ? 'SCORE / FRAME ' + String(replay.index + 1) : artwork.drawnSeed || DEFAULT_SETTINGS.seed;
   $('sceneCount').textContent = String(artwork.sceneCount).padStart(2, '0');
-  $('activeLayers').textContent = artwork.voices.filter(voice => voice.flowing).length + ' / 8 DRAWING';
+  $('activeLayers').textContent = (replay ? replay.engines : artwork.voices).filter(voice => voice.flowing).length + ' / ' + artwork.voices.length + ' DRAWING';
   // The onsets/change bar shows the unamplified *measured* positive
   // spectral change observed since the last UI refresh, not the artistically
   // smoothed flux multiplied by three. Also fixes the combined bass+onsets bar.
@@ -396,7 +571,7 @@ function updateUI(now) {
       ? Math.round(response * 100) + '% measured positive spectral change (recent peak)'
       : Math.round(response * 100) + '% input response');
     controls.row.classList.toggle('drawing', voice.flowing);
-    controls.state.textContent = voice.flowing ? 'Drawing' : 'Holding';
+    controls.state.textContent = !artwork.enabled(voice) ? 'Muted' : voice.flowing ? 'Drawing' : 'Holding';
     controls.row.title = voice.flowing ? 'Drawing from ' + voice.route.label.toLowerCase() : 'Ink held; listening for ' + voice.route.label.toLowerCase();
     const style = voice.art.drawnStyle;
     if (style && controls.styleToken !== style.token) {
@@ -418,17 +593,32 @@ function updateUI(now) {
     }
   }
   $('recordTime').textContent = recorder.busy ? formatTime((now - recorder.started) / 1000) : '00:00';
+  if (!$('listeningOverlay').hidden) listening.update(features, replay ? replay.engines : artwork.diagnostics(), Boolean(replay));
+  if (replay) {
+    $('scoreSeek').value = replay.time;
+    $('scoreTime').textContent = formatTime(replay.time / 1000) + ' / ' + formatTime(replay.score.duration / 1000);
+    $('scorePause').textContent = replay.paused ? 'Resume replay' : 'Pause replay';
+    $('performancePause').textContent = replay.paused ? 'Resume replay' : 'Pause replay';
+  }
 }
 
 function frame(now) {
   if (previousFrame && now - previousFrame < 1000 / 30 - (recorder.active ? 4 : 1)) return;
   const dt = previousFrame ? clamp((now - previousFrame) / 1000, 0.001, 0.12) : 1 / 30;
   previousFrame = now; clock += dt;
+  if (replay) {
+    replay.advance(dt); const sheet = replay.sheet(); setSheetSize(sheet);
+    paintSheet(artwork.context, sheet); features = replay.features;
+    bandMeters.update(features.bandRms, dt, features.active, true);
+    changeMeter.sample(features.raw.flux, features.active, true);
+    if (features.beat) onsetUntil = now + 150;
+    drawWaveform(null); updateUI(now); return;
+  }
   const data = audio.read();
   features = data ? tracker.update(data.wave, data.frequencies, data.sampleRate, dt,
     +$('sensitivity').value / 100, +$('smoothing').value / 100) : SILENCE;
   if (features.beat) onsetUntil = now + 150;
-  const available = Boolean(audio.kind) && !audio.mediaElement?.paused;
+  const available = Boolean(audio.kind) && !audio.mediaElement?.paused && !drawingPaused;
   bandMeters.update(features.bandRms, dt, features.active, available && Boolean(data));
   changeMeter.sample(features.raw.flux, features.active, available && Boolean(data));
   const flowing = soundGate.update(features.active, dt, available && Boolean(data));
@@ -450,18 +640,22 @@ function frame(now) {
   artwork.draw(dt, +$('motion').value / 100, $('gentle').checked, cycle);
   drawWaveform(data?.wave);
   if (recorder.active) { paintRecording(); recorder.captureFrame(); }
+  if (scoreCapture && !scoreCapture.capture(now, artwork, features, $('gentle').checked)) finishScore();
   frames++;
   if (now - fpsStart > 1000) { fps = Math.round(frames * 1000 / (now - fpsStart)); frames = 0; fpsStart = now; }
   if (now - uiTime > 100) { updateUI(now); uiTime = now; }
 }
 
-window.addEventListener('pagehide', () => { if (recorder.active) recorder.stop(); frameClock.stop(); audio.stop(); });
+window.addEventListener('pagehide', () => { if (recorder.active) recorder.stop(); awake.dispose(); clearTimeout(performanceTimer); frameClock.stop(); audio.stop(); });
 
 // Small read-only diagnostics surface for smoke tests and bug reports.
 window.AlgoAnimate = Object.freeze({
-  version: '0.12',
+  version: '0.13',
   diagnostics: () => ({
-    source: audio.kind, audio: audio.diagnostics(), seed: artwork.drawnSeed, engine: 'ensemble',
+    source: audio.kind, paused: drawingPaused, performance: performanceMode, wakeLock: awake.status,
+    replay: replay ? { frame: replay.index, time: replay.time, paused: replay.paused, duration: replay.score.duration } : null,
+    score: scoreData ? { frames: scoreData.frames.length, scenes: scoreData.scenes.length, duration: scoreData.duration } : null,
+    audio: audio.diagnostics(), seed: artwork.drawnSeed, engine: 'ensemble',
     demo: audio.kind === 'demo' ? { title: demoPlaylist.track.title, index: demoPlaylist.index,
       tracks: DEMO_TRACKS.length, paused: demoPlayer.paused, time: demoPlayer.currentTime } : null,
     engines: artwork.diagnostics(), compositions: artwork.sceneCount,

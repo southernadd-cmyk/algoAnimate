@@ -1,4 +1,4 @@
-# ALGO / ANIMATE — v0.12
+# ALGO / ANIMATE — v0.13
 
 **Sound, in living ink.** A browser-only audio experiment using the golden ratio
 and ALGO / ART's expressive marker renderer.
@@ -13,12 +13,18 @@ and ALGO / ART's expressive marker renderer.
 2. Watch eight AlgoArt engines layer their marker strokes on one canvas.
    Each voice has its own pen profile and colour family, both randomised at
    its next drawing. The cards show actual ink samples and live input meters.
-   Choose a colour mood and landscape or portrait paper.
+   Choose a colour mood and landscape or portrait paper. Click a card or **Solo** to isolate a drawing voice; **Mute** hides and holds it. The audio continues unchanged.
 3. Adjust composition density, sensitivity, pen response, drawing-cycle duration and smoothing.
    **Gentle motion** starts enabled if your system requests reduced motion.
 4. Click **Record**, then **Stop recording** and **Download video**. Recordings
    contain the artwork and sound; optionally include the waveform. A take stops
-   automatically after three minutes. **Save frame** exports a PNG.
+   automatically after three minutes. **Save frame** offers screen PNG, 3× print PNG (4200 × 3000 landscape) or vector SVG.
+
+5. **Save score** keeps the feature history and ink timeline captured with a take. **Load score** or **Replay** plays it without audio; pause, restart or seek, then export a frame.
+6. **Performance** hides the studio for projection. Move the pointer or tap to reveal controls; Escape exits. Space pauses the pens, R starts/stops recording, C clears and F toggles fullscreen. Shortcuts leave typing and focused controls alone.
+7. **How it listens** overlays the eight input-to-pen mappings, measured band dBFS, RMS gate, spectral centroid and positive flux. The overlay is separate from frame and video exports.
+
+Projection and recording request a screen wake lock where the browser permits it; the studio reports whether it is awake, released or unavailable. A lock is released when both activities end, and requested again on return to a visible tab.
 
 Recording uses a dedicated worker clock and explicitly captures each painted
 frame, so switching to the sound tab does not depend on the preview's animation
@@ -157,9 +163,11 @@ pixels. The public palette hook is adapted in `js/ink-palette.js`, in both the
 worker and fallback renderer; no vendor source is modified.
 
 Live capture timing, noise, sample rates and browser FFT behaviour can differ,
-so v0.12 does not promise bit-identical videos across devices or mathematical
+so live performances do not promise bit-identical videos across devices or mathematical
 uniqueness for every possible sound. Frame rate targets 30 FPS and
 depends on the device, engine and number of marks. This is a prototype.
+
+Scores use versioned JSON with quantised feature samples, shared native vector geometry, exact layer ages and latched pen pressure. They record the actual composition/kit handoffs and solo/mute decisions rather than asking a fresh worker and random ink deck to reproduce them. Replaying the same score preserves the vector drawing even at a different screen size; canvas antialiasing can vary between browser engines. Scores contain no audio. Capture is bounded to three minutes / 5,500 frames and a 20 MB file budget; completed scores remain in memory only until replaced or the page is closed. Download a score to keep it. Imports validate sizes, references, paths and paint values; SVGs contain native strokes rather than embedded screenshots.
 
 The pinned engine and font are documented in
 [vendor/algoart/PROVENANCE.md](vendor/algoart/PROVENANCE.md); the original source
