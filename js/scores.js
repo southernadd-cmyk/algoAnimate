@@ -77,6 +77,16 @@ const number = (value, low = -1e6, high = 1e6) => { if (!Number.isFinite(value) 
 const colour = value => { if (typeof value !== 'string' || !/^(#[0-9a-f]{3,8}|(?:rgb|hsl)a?\([\d\s.,%+/-]+\))$/i.test(value)) fail(); };
 const array = (value, max) => { if (!Array.isArray(value) || value.length > max) fail(); };
 const ref = (value, records) => { if (!Number.isInteger(value) || value < 0 || value >= records.length) fail(); };
+function validatePath(d) {
+  if (typeof d !== 'string' || d.length > 100000) fail();
+  const tokens = d.match(/[MLCZ]|-?(?:\d*\.)?\d+(?:e[-+]?\d+)?/gi) || [];
+  if (tokens[0] !== 'M' || tokens.join('') !== d.replace(/[\s,]+/g, '')) fail();
+  for (let i = 0; i < tokens.length;) {
+    const count = { M: 2, L: 2, C: 6, Z: 0 }[tokens[i++]];
+    if (count === undefined || i + count > tokens.length) fail();
+    for (let j = 0; j < count; j++) number(Number(tokens[i++]));
+  }
+}
 export function parseScore(text) {
   if (typeof text !== 'string' || text.length > MAX_SCORE_BYTES) fail();
   const score = JSON.parse(text);
@@ -89,7 +99,7 @@ export function parseScore(text) {
     number(scene.inkMemory, 0, 2); array(scene.paths, 10000); array(scene.schedule, 10000);
     if (scene.paths.length !== scene.schedule.length || (pathCount += scene.paths.length) > 100000) fail();
     scene.paths.forEach((path, i) => {
-      if (typeof path.d !== 'string' || path.d.length > 100000 || !/^[MLCZ\d\s.,e+\-]+$/i.test(path.d)) fail();
+      validatePath(path.d);
       colour(path.stroke); number(path.width, 0, 100); number(path.opacity, 0, 1);
       if (path.lineCap && !['round', 'butt', 'square'].includes(path.lineCap)) fail();
       if (path.blend && !['source-over', 'multiply', 'screen', 'darken', 'lighten', 'overlay'].includes(path.blend)) fail();
@@ -101,7 +111,6 @@ export function parseScore(text) {
       if (path.dashOffset !== undefined) number(path.dashOffset);
       const timing = scene.schedule[i]; number(timing.start, 0, 1); number(timing.duration, 1e-10, 1);
       if (timing.hold !== undefined) number(timing.hold, 0, 2);
-      Object.defineProperty(path, 'geometry', { value: markerGeometry(path.d) });
     });
   }
   for (const paper of score.papers) {
@@ -127,11 +136,12 @@ export function parseScore(text) {
       for (const layer of voice[3]) { array(layer, 2); if (layer.length !== 2) fail(); ref(layer[0], score.layers); number(layer[1], 0, 5); }
     }
   }
+  Object.defineProperty(score, 'validated', { value: true });
   return score;
 }
 
 export class ScoreReplay {
-  constructor(score) { this.score = score; this.time = 0; this.index = 0; this.paused = false; }
+  constructor(score) { this.score = score; this.time = 0; this.index = 0; this.paused = false; this.scenes = new Map(); }
   seek(time) {
     this.time = clamp(time, 0, this.score.duration);
     let low = 0, high = this.score.frames.length;
@@ -149,9 +159,16 @@ export class ScoreReplay {
   get engines() { return this.frame[4].map(voice => ({ enabled: Boolean(voice[0]), flowing: Boolean(voice[1]) })); }
   sheet() {
     const frame = this.frame, paper = this.score.papers[frame[2]];
+    const active = new Set(frame[4].flatMap(voice => voice[3].map(([id]) => this.score.layers[id].scene)));
+    // Keep arc tables only for the currently visible scenes, not the whole take.
+    for (const id of this.scenes.keys()) if (!active.has(id)) this.scenes.delete(id);
+    for (const id of active) if (!this.scenes.has(id)) {
+      const scene = this.score.scenes[id];
+      this.scenes.set(id, { ...scene, paths: scene.paths.map(path => ({ ...path, geometry: markerGeometry(path.d) })) });
+    }
     return { ...paper, paths: frame[4].flatMap(voice => voice[3].flatMap(([id, age]) => {
       const layer = this.score.layers[id];
-      return layerStrokes({ ...layer, age, scene: this.score.scenes[layer.scene] }, Boolean(frame[3]), 0.72, voice[2]);
+      return layerStrokes({ ...layer, age, scene: this.scenes.get(layer.scene) }, Boolean(frame[3]), 0.72, voice[2]);
     })) };
   }
 }

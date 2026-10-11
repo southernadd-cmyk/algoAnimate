@@ -151,7 +151,7 @@ function leaveScoreReplay() {
 function beginScoreReplay() {
   if (!scoreData || recorder.busy || pending || preparing) return;
   try {
-    if (scoreData.scenes.some(scene => scene.paths.some(path => !path.geometry))) scoreData = parseScore(JSON.stringify(scoreData));
+    if (!scoreData.validated) scoreData = parseScore(JSON.stringify(scoreData));
     audio.stop(); artwork.resetSound(); soundGate.reset();
     replay = new ScoreReplay(scoreData); drawingPaused = false;
     document.body.classList.add('replaying'); $('scoreSeek').max = scoreData.duration;
