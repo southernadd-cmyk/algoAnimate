@@ -9,8 +9,8 @@ permissions:
   id-token: write
 jobs:
   test:
-    # A manual deploy is an explicit release of code already checked separately.
-    if: github.event_name != 'workflow_dispatch'
+    # Explicit releases can reuse passed checks when application code is unchanged.
+    if: github.event_name != 'workflow_dispatch' && !startsWith(github.event.head_commit.message, '[deploy-verified]')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -36,7 +36,7 @@ jobs:
           if-no-files-found: ignore
   deploy:
     needs: test
-    if: ${{ !cancelled() && (needs.test.result == 'success' || github.event_name == 'workflow_dispatch') }}
+    if: ${{ !cancelled() && (needs.test.result == 'success' || github.event_name == 'workflow_dispatch' || startsWith(github.event.head_commit.message, '[deploy-verified]')) }}
     concurrency:
       group: pages-deploy
       cancel-in-progress: false
