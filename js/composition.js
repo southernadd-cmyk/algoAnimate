@@ -50,10 +50,26 @@ export function renderComposition(A, canvas, settings) {
           thickness: pen.thickness * (frame ? 0.65 : 0.82) }, random);
     } finally { role = previousRole; }
   };
-  try { return A.render(canvas, settings, 0.5); }
+  let result;
+  try { result = A.render(canvas, settings, 0.5); }
   finally {
     A.rect = originalRect; A.stroke = originalStroke;
     for (const [name, method] of shapeHooks) A[name] = method;
     restorePlacement();
   }
+
+  // Automatic Marks may reject every proposed gesture when its reserved
+  // negative-space voids overlap all available anchors. In that rare case,
+  // keep its sound-derived seed, pen, golden-angle lane and native algorithm;
+  // retry once without the optional void mask rather than accepting a blank
+  // composition (which would prevent all eight voices from starting).
+  // Clear the first pass's grain so retries don't double the paper texture.
+  const recorder = A.svgRecorder;
+  if (settings.mode === 'scribble' && !settings.emptyScribbleRecovery
+    && settings.negativeSpace > 0 && recorder?.paths.length === 0) {
+    recorder.paths.length = 0;
+    if (recorder.paperMarks) recorder.paperMarks.length = 0;
+    return renderComposition(A, canvas, { ...settings, negativeSpace: 0, emptyScribbleRecovery: true });
+  }
+  return result;
 }

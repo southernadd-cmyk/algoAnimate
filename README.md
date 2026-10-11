@@ -159,6 +159,10 @@ and ink retention. **Energy means each route's own assigned inputs**, not always
 volume: Constructed Forms uses brightness, Connected Fields uses onsets, and
 combination routes average their assigned features. Unassigned channels never
 steer that voice's composition. Density still limits the whole ensemble.
+If a rare Automatic Marks seed makes every proposed stroke fall inside a protected
+negative-space void, the adapter deterministically retries once without the
+optional void mask. The original AlgoArt renderer and sound-derived seed remain
+unchanged; successful first passes and all other engines are unaffected.
 Substantial changes in the smoothed assigned signal (at least 0.15) request a
 new composition early, with a 1.25-second cooldown; small variations wait for
 the normal cycle. Existing strokes keep their geometry and pressure, and an

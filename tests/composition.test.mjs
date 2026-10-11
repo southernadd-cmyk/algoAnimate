@@ -24,6 +24,45 @@ test('hierarchy bounds supporting rectangles, tags native motifs and restores re
   assert.equal(A.rect, rect); assert.equal(A.stroke, stroke);
 });
 
+test('Automatic Marks retries a completely empty void-masked composition without changing its seed', () => {
+  const attempts = [];
+  const A = { W: 1400, H: 1000, svgRecorder: { paths: [], paperMarks: [] },
+    stroke() { this.svgRecorder.paths.push({ d: 'M 0 0 L 40 20' }); },
+    rect() {},
+    render(canvas, settings) {
+      attempts.push({ seed: settings.seed, space: settings.negativeSpace,
+        interlock: settings.interlock, recovery: Boolean(settings.emptyScribbleRecovery) });
+      this.svgRecorder.paperMarks.push({ x: 1, y: 1, colour: '#000' });
+      if (settings.negativeSpace === 0) this.stroke();
+      return settings.seed;
+    } };
+  const stroke = A.stroke, rect = A.rect, interlock = { lane: 6, lanes: 8, phase: 0.42 };
+  const settings = { markHierarchy: true, seed: 'SOUND-123', mode: 'scribble',
+    negativeSpace: 85, interlock };
+  assert.equal(renderComposition(A, {}, settings), settings.seed);
+  assert.deepEqual(attempts.map(attempt => attempt.space), [85, 0]);
+  assert.ok(attempts.every(attempt => attempt.seed === settings.seed));
+  assert.ok(attempts.every(attempt => attempt.interlock === interlock));
+  assert.deepEqual(attempts.map(attempt => attempt.recovery), [false, true]);
+  assert.equal(A.svgRecorder.paths.length, 1);
+  assert.equal(A.svgRecorder.paperMarks.length, 1, 'discard retry grain from the unsuccessful pass');
+  assert.equal(A.stroke, stroke); assert.equal(A.rect, rect);
+  assert.equal(settings.negativeSpace, 85, 'do not mutate caller settings');
+});
+
+test('Automatic Marks does not retry healthy compositions or conceal failures in other engines', () => {
+  let renders = 0;
+  const A = { W: 1400, H: 1000, svgRecorder: { paths: [], paperMarks: [] },
+    stroke() { this.svgRecorder.paths.push({ d: 'M 0 0 L 10 10' }); },
+    rect() {},
+    render(canvas, settings) { renders++; if (settings.seed === 'healthy') this.stroke(); } };
+  renderComposition(A, {}, { markHierarchy: true, mode: 'scribble', seed: 'healthy', negativeSpace: 90 });
+  assert.equal(renders, 1);
+  A.svgRecorder.paths.length = 0;
+  renderComposition(A, {}, { markHierarchy: true, mode: 'field', seed: 'empty', negativeSpace: 90 });
+  assert.equal(renders, 2, 'other engines still report their actual empty output');
+});
+
 test('full-page frames are occasional and bypassed renders stay unchanged', () => {
   let drawn = 0;
   const A = { W: 1400, H: 1000, rect() { drawn++; }, stroke() {},
