@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#ede9e0">
+  <meta name="description" content="Turn browser audio into live golden-ratio marker art. Listen, animate, record and export, entirely in your browser.">
+  <meta property="og:title" content="ALGO / ANIMATE — Make sound visible">
+  <meta property="og:description" content="Sound becomes a seed. Mathematics becomes movement. A live audio experiment from ALGO / ART.">
+  <meta property="og:type" content="website">
+  <title>ALGO / ANIMATE — Sound into marks</title>
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+  <link rel="preload" href="./fonts/AlgoArt-Marker-Regular.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+  <header class="masthead">
+    <a class="brand" href="./" aria-label="AlgoAnimate home"><span class="phi">φ</span><span>ALGO<span class="slash">/</span>ANIMATE</span></a>
+    <div class="masthead-note"><span class="edition">v0.01 · EXPERIMENT</span><a href="https://southernadd-cmyk.github.io/algoart/" target="_blank" rel="noopener">From ALGO / ART <span aria-hidden="true">↗</span></a></div>
+  </header>
+
+  <main>
+    <div class="intro"><div><p class="eyebrow">SOUND INTO MARKS</p><h1>Make sound visible.</h1></div><p class="intro-note">A sound becomes a seed.<br>φ gives it somewhere to go.</p></div>
+
+    <div class="studio">
+      <section class="workspace" aria-label="Live artwork and incoming sound">
+        <div class="stage-heading"><span id="liveLabel" class="signal-state"><i aria-hidden="true"></i>WAITING FOR SOUND</span><span id="dimensions">1400 × 1000</span></div>
+        <div class="stage" id="stage"><div class="paper"><canvas id="art" width="1400" height="1000" aria-label="Live sound-driven AlgoArt composition"></canvas></div><span class="stage-corner" aria-hidden="true">φ / 01</span></div>
+        <div class="art-caption"><span id="seed">SOUND-READY</span><span><span id="fps">—</span> FPS <span class="caption-divider">/</span> <span id="sceneCount">01</span> COMPOSITIONS</span><button type="button" class="text-button" id="fullscreen" aria-label="Show artwork fullscreen">Full screen ↗</button></div>
+
+        <section class="signal-panel" aria-label="Audio waveform">
+          <div class="signal-heading"><h2>Incoming sound</h2><span id="signalInfo">CONNECT A SOURCE TO BEGIN</span></div>
+          <canvas id="waveform" width="1120" height="128" aria-label="Waveform of the incoming sound"></canvas>
+          <div class="band-meters"><div><span>BASS</span><meter id="bassMeter" min="0" max="1" value="0" aria-label="Bass energy"></meter></div><div><span>MID</span><meter id="midMeter" min="0" max="1" value="0" aria-label="Midrange energy"></meter></div><div><span>TREBLE</span><meter id="trebleMeter" min="0" max="1" value="0" aria-label="Treble energy"></meter></div><span class="beat" id="beat">● <span>ONSET</span></span></div>
+        </section>
+        <p class="workspace-note">Mathematics sets the rules. The sound moves the marker.</p>
+      </section>
+
+      <aside class="desk" aria-label="Audio, artwork and recording controls">
+        <section class="desk-section">
+          <div class="section-label"><span>01</span><h2>Find your sound</h2></div>
+          <button type="button" class="source-button primary" id="connectTab"><span class="button-icon" aria-hidden="true">↗</span><span>Browser tab<small>Share a tab and its audio</small></span><span aria-hidden="true">→</span></button>
+          <button type="button" class="source-button" id="chooseFile"><span class="button-icon" aria-hidden="true">＋</span><span>Audio file<small>Play a file from your device</small></span><span aria-hidden="true">→</span></button>
+          <input type="file" id="fileInput" accept="audio/*,.mp3,.wav,.ogg,.m4a,.flac,.aac,.webm,.mp4" hidden>
+          <div class="source-pair"><button type="button" id="connectMic">Microphone</button><button type="button" id="playDemo">Try demo sound</button></div>
+          <div class="source-summary"><span class="source-dot" id="sourceDot" aria-hidden="true"></span><span id="sourceName">No audio connected</span><button type="button" id="stopAudio" class="text-button" disabled>Disconnect</button></div>
+          <audio id="filePlayer" controls preload="metadata" hidden aria-label="Uploaded audio file player"></audio>
+          <details class="source-help"><summary>How browser audio works</summary><p>Play sound in another tab. Click <strong>Browser tab</strong>, select that tab, enable <strong>Share tab audio</strong>, then return here. Use desktop Chrome for tab capture; files and microphone work in more browsers.</p><p>The browser also requests a video track when sharing a tab. AlgoAnimate uses its audio; the recording contains the generated artwork.</p></details>
+          <p id="message" class="message" role="status" aria-live="polite" hidden></p>
+        </section>
+
+        <section class="desk-section">
+          <div class="section-label"><span>02</span><h2>Shape the response</h2></div>
+          <label class="select-label" for="engine">Composition engine</label>
+          <select id="engine"><option value="spiral">Golden Trajectories</option><option value="field">Orbital Studies</option><option value="rects">Recursive Divisions</option><option value="burst">Radiant Systems</option><option value="network">Connected Fields</option><option value="organic">Growth Systems</option><option value="geometric">Constructed Forms</option><option value="scribble">Automatic Marks</option></select>
+          <div class="select-pair"><div><label class="select-label" for="orientation">Paper</label><select id="orientation"><option value="landscape">Landscape</option><option value="portrait">Portrait</option></select></div><div><label class="select-label" for="palette">Ink palette</label><select id="palette"><option value="marker">Classic markers</option><option value="cmyk">CMYK</option><option value="primary">Primary</option><option value="earth">Earth</option><option value="neon">Neon</option><option value="mono">Monochrome</option></select></div></div>
+          <div class="range-control"><label for="sensitivity">Audio sensitivity</label><output for="sensitivity" id="sensitivityValue">100%</output><input type="range" id="sensitivity" min="25" max="300" value="100" step="5"><div class="range-note"><span>Quiet source</span><span>Stronger response</span></div></div>
+          <div class="range-control"><label for="motion">Movement</label><output for="motion" id="motionValue">60%</output><input type="range" id="motion" min="0" max="100" value="60"><div class="range-note"><span>Still marks</span><span>Expressive</span></div></div>
+          <div class="range-control"><label for="evolution">Composition changes</label><output for="evolution" id="evolutionValue">~4.0s</output><input type="range" id="evolution" min="0" max="100" value="50"><div class="range-note"><span>Slow transitions</span><span>Frequent changes</span></div></div>
+          <div class="range-control"><label for="smoothing">Smoothing</label><output for="smoothing" id="smoothingValue">55%</output><input type="range" id="smoothing" min="0" max="100" value="55"><div class="range-note"><span>Immediate</span><span>Fluid</span></div></div>
+          <label class="check-label"><input type="checkbox" id="gentle"> Gentle motion</label>
+          <p class="control-note">Bass moves the larger forms. Higher frequencies move the fine marks. Changes in sound create new seeds.</p>
+        </section>
+
+        <section class="desk-section recording-section">
+          <div class="section-label"><span>03</span><h2>Keep a take</h2><span class="format-badge" id="recordingFormat">VIDEO + AUDIO</span></div>
+          <label class="check-label"><input type="checkbox" id="includeWaveform"> Include waveform in video</label>
+          <div class="record-row"><button type="button" class="record-button" id="record" disabled><span aria-hidden="true">●</span> Record</button><button type="button" class="stop-record-button" id="stopRecording" hidden>■ Stop recording</button><span class="timecode" id="recordTime" aria-live="off">00:00</span></div>
+          <p id="recordHint" class="control-note">Connect sound to record. Up to 3 minutes per take.</p>
+          <div class="take" id="take" hidden><div><strong>Your take is ready.</strong><span id="takeDetails"></span></div><div class="take-actions"><a id="download" class="download-button" download>Download video ↓</a><button type="button" id="previewRecording" class="text-button">Preview ↗</button></div></div>
+          <button type="button" class="snapshot-button" id="snapshot">Save this frame as PNG ↓</button>
+        </section>
+      </aside>
+    </div>
+  </main>
+  <footer><span>ALGO / ANIMATE <span class="footer-dot">·</span> v0.01</span><span>Sound stays in your browser. No account. No uploads.</span><a href="https://github.com/southernadd-cmyk/algoAnimate" target="_blank" rel="noopener">Source on GitHub ↗</a></footer>
+  <dialog id="previewDialog"><div class="dialog-heading"><h2>Your recorded take</h2><button type="button" id="closePreview" aria-label="Close recording preview">✕</button></div><video id="recordingPreview" controls playsinline></video></dialog>
+  <script src="./vendor/algoart/phi.js"></script>
+  <script src="./vendor/algoart/random.js"></script>
+  <script src="./vendor/algoart/palettes.js"></script>
+  <script src="./vendor/algoart/marker.js"></script>
+  <script src="./vendor/algoart/generator.js"></script>
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>
