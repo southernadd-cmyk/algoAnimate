@@ -16,7 +16,7 @@
 <body>
   <header class="masthead">
     <a class="brand" href="./" aria-label="AlgoAnimate home"><span class="phi">φ</span><span>ALGO<span class="slash">/</span>ANIMATE</span></a>
-    <div class="masthead-note"><span class="edition">v0.01 · EXPERIMENT</span><a href="https://southernadd-cmyk.github.io/algoart/" target="_blank" rel="noopener">From ALGO / ART <span aria-hidden="true">↗</span></a></div>
+    <div class="masthead-note"><span class="edition">v0.02 · EXPERIMENT</span><a href="https://southernadd-cmyk.github.io/algoart/" target="_blank" rel="noopener">From ALGO / ART <span aria-hidden="true">↗</span></a></div>
   </header>
 
   <main>
@@ -55,11 +55,11 @@
           <select id="engine"><option value="spiral">Golden Trajectories</option><option value="field">Orbital Studies</option><option value="rects">Recursive Divisions</option><option value="burst">Radiant Systems</option><option value="network">Connected Fields</option><option value="organic">Growth Systems</option><option value="geometric">Constructed Forms</option><option value="scribble">Automatic Marks</option></select>
           <div class="select-pair"><div><label class="select-label" for="orientation">Paper</label><select id="orientation"><option value="landscape">Landscape</option><option value="portrait">Portrait</option></select></div><div><label class="select-label" for="palette">Ink palette</label><select id="palette"><option value="marker">Classic markers</option><option value="cmyk">CMYK</option><option value="primary">Primary</option><option value="earth">Earth</option><option value="neon">Neon</option><option value="mono">Monochrome</option></select></div></div>
           <div class="range-control"><label for="sensitivity">Audio sensitivity</label><output for="sensitivity" id="sensitivityValue">100%</output><input type="range" id="sensitivity" min="25" max="300" value="100" step="5"><div class="range-note"><span>Quiet source</span><span>Stronger response</span></div></div>
-          <div class="range-control"><label for="motion">Movement</label><output for="motion" id="motionValue">60%</output><input type="range" id="motion" min="0" max="100" value="60"><div class="range-note"><span>Still marks</span><span>Expressive</span></div></div>
-          <div class="range-control"><label for="evolution">Composition changes</label><output for="evolution" id="evolutionValue">~4.0s</output><input type="range" id="evolution" min="0" max="100" value="50"><div class="range-note"><span>Slow transitions</span><span>Frequent changes</span></div></div>
+          <div class="range-control"><label for="motion">Pen response</label><output for="motion" id="motionValue">60%</output><input type="range" id="motion" min="0" max="100" value="60"><div class="range-note"><span>Even pressure</span><span>Sound-driven</span></div></div>
+          <div class="range-control"><label for="evolution">Drawing cycle</label><output for="evolution" id="evolutionValue">~4.0s</output><input type="range" id="evolution" min="0" max="100" value="50"><div class="range-note"><span>Slow pen</span><span>Quick pen</span></div></div>
           <div class="range-control"><label for="smoothing">Smoothing</label><output for="smoothing" id="smoothingValue">55%</output><input type="range" id="smoothing" min="0" max="100" value="55"><div class="range-note"><span>Immediate</span><span>Fluid</span></div></div>
           <label class="check-label"><input type="checkbox" id="gentle"> Gentle motion</label>
-          <p class="control-note">Bass moves the larger forms. Higher frequencies move the fine marks. Changes in sound create new seeds.</p>
+          <p class="control-note">The marker keeps drawing. Sound changes its pace and pressure; new seeds guide the next strokes. Older ink recedes to make room.</p>
         </section>
 
         <section class="desk-section recording-section">
@@ -73,7 +73,7 @@
       </aside>
     </div>
   </main>
-  <footer><span>ALGO / ANIMATE <span class="footer-dot">·</span> v0.01</span><span>Sound stays in your browser. No account. No uploads.</span><a href="https://github.com/southernadd-cmyk/algoAnimate" target="_blank" rel="noopener">Source on GitHub ↗</a></footer>
+  <footer><span>ALGO / ANIMATE <span class="footer-dot">·</span> v0.02</span><span>Sound stays in your browser. No account. No uploads.</span><a href="https://github.com/southernadd-cmyk/algoAnimate" target="_blank" rel="noopener">Source on GitHub ↗</a></footer>
   <dialog id="previewDialog"><div class="dialog-heading"><h2>Your recorded take</h2><button type="button" id="closePreview" aria-label="Close recording preview">✕</button></div><video id="recordingPreview" controls playsinline></video></dialog>
   <script src="./vendor/algoart/phi.js"></script>
   <script src="./vendor/algoart/random.js"></script>

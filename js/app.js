@@ -15,6 +15,7 @@ let requestedSeed = DEFAULT_SETTINGS.seed, generation = 0, building = false;
 let clock = 0, lastSceneTime = 0, previousFrame = 0, uiTime = 0, onsetUntil = 0;
 let frames = 0, fpsStart = performance.now(), fps = 0, recordingWithWaveform = false;
 let startRecordPending = false;
+let firstSoundSeed = false;
 const waveHistory = [];
 const names = { tab: 'Browser tab audio', microphone: 'Microphone', demo: 'Demo · 108 BPM' };
 
@@ -66,7 +67,7 @@ function syncControls() {
 function resetSound() {
   tracker.reset(); soundSeed.reset(); features = SILENCE;
   waveHistory.length = 0;
-  lastSceneTime = clock - evolutionInterval(+$('evolution').value) + 0.45;
+  firstSoundSeed = true; lastSceneTime = clock;
 }
 
 async function connect(action, label) {
@@ -86,7 +87,7 @@ async function disconnect(ended = false) {
   if (pending) return;
   if (recorder.busy) await recorder.stop();
   audio.stop(); tracker.reset(); features = SILENCE;
-  message(ended ? 'The audio source ended. Your last composition is held on the paper.' : 'Audio disconnected. Your last composition is held on the paper.');
+  message(ended ? 'The audio source ended. Your last drawing is held on the paper.' : 'Audio disconnected. Your last drawing is held on the paper.');
   syncControls();
 }
 
@@ -123,7 +124,7 @@ player.addEventListener('error', () => {
 function settings(seed) {
   return { ...DEFAULT_SETTINGS, seed, mode: $('engine').value, orientation: $('orientation').value, palette: $('palette').value };
 }
-async function generate(seed, immediate = false) {
+async function generate(seed, immediate = false, startNow = false) {
   const request = ++generation;
   requestedSeed = seed; building = true;
   syncControls();
@@ -131,10 +132,10 @@ async function generate(seed, immediate = false) {
     const scene = await builder.build(settings(seed));
     if (request !== generation) return;
     if (!scene.paths.length) throw new Error('The composition did not produce any marks. Select another engine.');
-    artwork.setScene(scene, immediate);
+    artwork.setScene(scene, immediate, startNow);
     $('stage').classList.toggle('portrait', scene.height > scene.width);
     $('dimensions').textContent = scene.width + ' × ' + scene.height;
-    $('seed').textContent = scene.seed;
+    $('seed').textContent = artwork.drawnSeed;
     $('sceneCount').textContent = String(artwork.sceneCount).padStart(2, '0');
     syncControls();
   } catch (error) {
@@ -257,6 +258,7 @@ function updateUI(now) {
   $('bassMeter').value = features.bass; $('midMeter').value = features.mid; $('trebleMeter').value = features.treble;
   $('beat').classList.toggle('lit', now < onsetUntil);
   $('fps').textContent = String(fps || '—');
+  $('seed').textContent = artwork.drawnSeed || DEFAULT_SETTINGS.seed;
   $('recordTime').textContent = recorder.busy ? formatTime((now - recorder.started) / 1000) : '00:00';
 }
 
@@ -270,12 +272,15 @@ function frame(now) {
     +$('sensitivity').value / 100, +$('smoothing').value / 100) : SILENCE;
   if (features.beat) onsetUntil = now + 150;
   const seed = soundSeed.update(features, dt);
-  const interval = evolutionInterval(+$('evolution').value) * ($('gentle').checked ? 1.5 : 1);
-  if (features.active && !building && seed !== requestedSeed && clock - lastSceneTime >= interval) {
+  const cycle = evolutionInterval(+$('evolution').value);
+  if (features.active && !building && seed !== 'SOUND-READY'
+    && (firstSoundSeed || (seed !== requestedSeed && artwork.needsScene)) && clock - lastSceneTime >= 0.25) {
     lastSceneTime = clock;
-    generate(seed);
+    const startNow = firstSoundSeed; firstSoundSeed = false;
+    generate(seed, false, startNow);
   }
-  artwork.draw(features, dt, +$('motion').value / 100, $('gentle').checked);
+  const flowing = Boolean(audio.kind) && !(audio.kind === 'file' && player.paused);
+  artwork.draw(features, dt, +$('motion').value / 100, $('gentle').checked, cycle, flowing);
   drawWaveform(data?.wave);
   if (recorder.busy) paintRecording();
   frames++;
@@ -290,13 +295,16 @@ window.addEventListener('pagehide', () => { if (recorder.active) recorder.stop()
 
 // Small read-only diagnostics surface for smoke tests and bug reports.
 window.AlgoAnimate = Object.freeze({
-  version: '0.01',
+  version: '0.02',
   diagnostics: () => ({
-    source: audio.kind, seed: artwork.current?.seed, compositions: artwork.sceneCount,
+    source: audio.kind, seed: artwork.drawnSeed, engine: artwork.drawnMode,
+    targetSeed: artwork.current?.seed, compositions: artwork.sceneCount,
     paths: artwork.current?.paths.length || 0, worker: Boolean(builder.worker), building,
     dimensions: [art.width, art.height], features: { level: features.level, bass: features.bass, mid: features.mid, treble: features.treble },
     recording: recorder.active, recordingBusy: recorder.busy,
     recordedBytes: recorder.result?.blob.size || 0, recordingType: recorder.result?.type || recorder.mimeType,
+    drawing: { ...artwork.stats, layers: artwork.layers.length, cycles: artwork.turns,
+      queuedSeed: artwork.queued?.seed || null, flowing: artwork.flowing },
     fps, maxTakeSeconds: MAX_TAKE_SECONDS
   })
 });

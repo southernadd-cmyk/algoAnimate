@@ -1,4 +1,5 @@
-import { hash, clamp } from './features.js';
+import { clamp } from './features.js';
+import { markerGeometry, strokeSchedule, strokeWindow, inkWindow } from './ink.js';
 
 export const DEFAULT_SETTINGS = Object.freeze({
   seed: 'SOUND-READY', mode: 'spiral', orientation: 'landscape',
@@ -44,7 +45,7 @@ export class SceneBuilder {
     A.svgRecorder = { precise: true, paths: [], paperMarks: [] };
     try {
       A.render(canvas, settings, 0.5);
-      return { ...A.svgRecorder, seed: settings.seed, width: A.W, height: A.H, paper: settings.paper };
+      return { ...A.svgRecorder, seed: settings.seed, mode: settings.mode, width: A.W, height: A.H, paper: settings.paper };
     } finally { A.svgRecorder = null; }
   }
   build(settings) {
@@ -73,29 +74,59 @@ export class AnimatedArtwork {
     this.canvas = canvas;
     this.context = canvas.getContext('2d', { alpha: false });
     this.current = null;
-    this.previous = null;
-    this.fade = 1;
-    this.phase = 0;
+    this.layers = [];
+    this.queued = null;
+    this.flowing = false;
+    this.speed = 1;
+    this.turns = 0;
+    this.stats = { progress: 0, penTips: 0, visiblePaths: 0, inkLength: 0 };
     this.sceneCount = 0;
   }
-  setScene(scene, immediate = false) {
+  get activeLayer() { return this.layers.at(-1); }
+  get drawnSeed() { return this.activeLayer?.scene.seed || this.current?.seed; }
+  get drawnMode() { return this.activeLayer?.scene.mode || this.current?.mode; }
+  get needsScene() { return !this.queued && (this.activeLayer?.age || 0) >= 0.5; }
+  setScene(scene, immediate = false, startNow = false) {
     const changedSize = this.canvas.width !== scene.width || this.canvas.height !== scene.height;
     if (changedSize) { this.canvas.width = scene.width; this.canvas.height = scene.height; }
-    const paths = scene.paths.map((entry, index) => ({
-      ...entry, path: new Path2D(entry.d), ...pathBounds(entry.d),
-      phase: hash(scene.seed + '|' + index) / 4294967296 * Math.PI * 2
+    const paths = scene.paths.map(entry => ({
+      ...entry, path: new Path2D(entry.d), geometry: markerGeometry(entry.d), ...pathBounds(entry.d)
     }));
-    this.previous = immediate || changedSize ? null : this.current;
-    this.current = { ...scene, paths };
-    this.fade = this.previous ? 0 : 1;
+    this.current = { ...scene, paths, schedule: strokeSchedule(paths) };
+    if (immediate || changedSize || !this.flowing) {
+      this.layers = []; this.queued = null;
+    } else if (startNow) {
+      this.layers.push(this.layer(this.current));
+      this.layers = this.layers.slice(-3); this.queued = null; this.turns++;
+    } else this.queued = this.current;
     this.sceneCount++;
   }
-  draw(features, dt, motion = 0.6, gentle = false) {
+  layer(scene, age = 0, preview = false) {
+    return { scene, age, preview, pressure: new Array(scene.paths.length).fill(null) };
+  }
+  draw(features, dt, response = 0.6, gentle = false, cycle = 4, flowing = features.active) {
     if (!this.current) return;
-    const ctx = this.context, scene = this.current;
-    if (features.active) this.phase += dt * (0.4 + features.level * 1.7);
-    this.fade = Math.min(1, this.fade + dt / (gentle ? 1.8 : 0.85));
-    const blend = this.fade * this.fade * (3 - 2 * this.fade);
+    this.flowing = flowing;
+    const memory = gentle ? 0.8 : 0.7;
+    if (flowing) {
+      if (!this.layers.length) {
+        // Clear the ready-state drawing along its strokes while the first
+        // live drawing begins, rather than making it disappear in one frame.
+        this.layers = [this.layer(this.current, 0, true), this.layer(this.current)];
+        this.turns++;
+      }
+      const targetSpeed = 1 + response * (features.level * 0.55 + features.mid * 0.2 + features.flux * 0.35);
+      this.speed += (targetSpeed - this.speed) * (1 - Math.exp(-dt / 0.2));
+      const advance = dt * this.speed / Math.max(0.5, cycle * (gentle ? 1.6 : 1));
+      for (const layer of this.layers) layer.age += advance;
+      while (this.activeLayer.age >= 1) {
+        const next = this.queued || this.current, overflow = this.activeLayer.age - 1;
+        this.queued = null;
+        this.layers.push(this.layer(next, overflow)); this.turns++;
+      }
+      this.layers = this.layers.filter(layer => layer.age < (layer.preview ? 1 / 1.6 : 1 + memory));
+    }
+    const ctx = this.context, scene = this.activeLayer?.scene || this.current;
     ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
     ctx.fillStyle = scene.paper; ctx.fillRect(0, 0, scene.width, scene.height);
     ctx.globalAlpha = 0.035;
@@ -103,32 +134,46 @@ export class AnimatedArtwork {
       ctx.fillStyle = mark.colour; ctx.fillRect(mark.x, mark.y, mark.w, mark.h);
     }
     ctx.globalAlpha = 1;
-    if (this.previous && blend < 1) this.drawScene(this.previous, features, 1 - blend, motion, gentle);
-    this.drawScene(scene, features, blend, motion, gentle);
-    if (this.fade >= 1) this.previous = null;
+    this.stats = { progress: this.activeLayer?.age || 0, penTips: 0, visiblePaths: 0, inkLength: 0 };
+    if (this.layers.length) for (const layer of this.layers) this.drawLayer(layer, features, response, gentle, memory);
+    else this.drawLayer(this.layer(this.current, 0, true), features, 0, gentle, memory, true);
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
   }
-  drawScene(scene, features, alpha, motion, gentle) {
-    const ctx = this.context, strength = motion * (gentle ? 0.22 : 1);
+  drawLayer(layer, features, response, gentle, memory, still = false) {
+    const ctx = this.context, scene = layer.scene;
     for (let i = 0; i < scene.paths.length; i++) {
-      const entry = scene.paths[i];
-      const large = clamp(entry.extent / 450);
-      const energy = features.bass * large + features.treble * (1 - large) + features.mid * 0.35;
-      const angle = this.phase * (0.55 + (i % 5) * 0.13) + entry.phase;
-      const x = Math.sin(angle) * (4 + 13 * large) * energy * strength;
-      const y = Math.cos(angle * 0.618) * (3 + 11 * large) * energy * strength;
-      const rotation = Math.sin(angle * 0.618) * (features.mid + features.treble * 0.5) * strength * 0.04;
-      const scale = 1 + features.bass * strength * large * 0.055;
-      ctx.save();
-      ctx.translate(entry.x + x, entry.y + y); ctx.rotate(rotation); ctx.scale(scale, scale);
-      ctx.translate(-entry.x, -entry.y);
+      const entry = scene.paths[i], timing = scene.schedule[i];
+      const { from, to } = still ? { from: 0, to: 1 } : layer.preview
+        ? { from: clamp((layer.age * 1.6 - timing.start) / timing.duration), to: 1 }
+        : inkWindow(layer.age, timing, memory);
+      if (to <= from || !entry.geometry.length) continue;
+      if (layer.pressure[i] === null) {
+        const large = clamp(entry.extent / 450), strength = response * (gentle ? 0.4 : 1);
+        // Pressure is latched when this stroke starts: marks already on the
+        // paper stay in place while the sound controls the next pen stroke.
+        layer.pressure[i] = layer.preview ? 1 : 1 + strength * (features.level * 0.2
+          + features.bass * large * 0.24 + features.treble * (1 - large) * 0.12);
+      }
       ctx.strokeStyle = entry.stroke;
-      ctx.lineWidth = entry.width * (1 + features.level * strength * 0.12);
-      ctx.globalAlpha = clamp(entry.opacity * alpha);
+      ctx.lineWidth = entry.width * layer.pressure[i];
+      ctx.globalAlpha = clamp(entry.opacity);
       ctx.lineCap = entry.lineCap || 'round'; ctx.lineJoin = 'round';
       ctx.globalCompositeOperation = entry.blend || 'source-over';
-      ctx.setLineDash(entry.dash || []); ctx.lineDashOffset = entry.dashOffset || 0;
-      ctx.stroke(entry.path); ctx.restore();
+      ctx.setLineDash(entry.dash || []);
+      ctx.lineDashOffset = (entry.dashOffset || 0) + from * entry.geometry.length;
+      if (from === 0 && to === 1) ctx.stroke(entry.path);
+      else {
+        ctx.beginPath();
+        for (const [type, ...points] of strokeWindow(entry.geometry, from, to)) {
+          if (type === 'M') ctx.moveTo(...points);
+          else if (type === 'C') ctx.bezierCurveTo(...points);
+          else ctx.lineTo(...points);
+        }
+        ctx.stroke();
+      }
+      this.stats.visiblePaths++;
+      this.stats.inkLength += (to - from) * entry.geometry.length;
+      if (!layer.preview && to > 0 && to < 1) this.stats.penTips++;
     }
   }
 }

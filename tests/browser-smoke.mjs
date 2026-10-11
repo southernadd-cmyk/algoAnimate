@@ -32,6 +32,32 @@ async function select(id, value) {
   await page.selectOption('#' + id, value);
   await page.waitForFunction(count => window.AlgoAnimate.diagnostics().compositions > count && !window.AlgoAnimate.diagnostics().building, before, { timeout: 20000 });
 }
+async function motionSamples(count = 20, spacing = 80) {
+  const samples = await page.evaluate(async ({ count, spacing }) => {
+    const art = document.getElementById('art'), thumbnail = document.createElement('canvas');
+    thumbnail.width = 200; thumbnail.height = Math.round(200 * art.height / art.width);
+    const ctx = thumbnail.getContext('2d', { willReadFrequently: true }), samples = [];
+    for (let frame = 0; frame < count; frame++) {
+      await new Promise(resolve => setTimeout(resolve, spacing));
+      ctx.drawImage(art, 0, 0, thumbnail.width, thumbnail.height);
+      const pixels = ctx.getImageData(0, 0, thumbnail.width, thumbnail.height).data;
+      let hash = 2166136261, ink = 0;
+      for (let i = 0; i < pixels.length; i += 4) {
+        hash = Math.imul(hash ^ pixels[i], 16777619);
+        hash = Math.imul(hash ^ pixels[i + 1], 16777619);
+        hash = Math.imul(hash ^ pixels[i + 2], 16777619);
+        if (pixels[i] < 205 || pixels[i + 1] < 205 || pixels[i + 2] < 185) ink++;
+      }
+      samples.push({ hash: hash >>> 0, ink, drawing: window.AlgoAnimate.diagnostics().drawing });
+    }
+    return samples;
+  }, { count, spacing });
+  assert.ok(new Set(samples.map(s => s.hash)).size >= count * 0.9, 'Actual artwork pixels keep changing between seeds');
+  assert.ok(samples.every(s => s.ink > 20), 'Pen cycles do not clear the entire paper');
+  assert.ok(samples.filter(s => s.drawing.penTips > 0).length >= count * 0.85, 'Marker tips are drawing throughout the cycle');
+  assert.ok(samples.every(s => s.drawing.layers <= 3), 'Ink history remains bounded');
+  return samples;
+}
 async function download(path) {
   const request = page.waitForEvent('download');
   await page.click('#download');
@@ -76,16 +102,36 @@ try {
   await page.screenshot({ path: resolve(results, 'desktop-live.png'), fullPage: true });
   console.log('Demo produces measured audio, a waveform and sound-derived composition changes.');
 
+  const defaultMotion = await motionSamples(60, 100);
+  await writeFile(resolve(results, 'continuous-ink.json'), JSON.stringify(defaultMotion, null, 2));
+  const enginesInMotion = {};
+  await page.fill('#evolution', '100');
+  for (const engine of ['field', 'rects', 'burst', 'network', 'organic', 'geometric', 'scribble', 'spiral']) {
+    await select('engine', engine);
+    await page.waitForFunction(mode => window.AlgoAnimate.diagnostics().engine === mode, engine, { timeout: 12000 });
+    const samples = await motionSamples();
+    enginesInMotion[engine] = { uniqueFrames: new Set(samples.map(s => s.hash)).size, frames: samples.length };
+  }
+  await page.fill('#evolution', '50');
+  await page.screenshot({ path: resolve(results, 'desktop-continuous.png'), fullPage: true });
+  console.log('All eight engines continuously draw actual marker strokes; no blank-paper resets or image holds.');
+
   await page.click('#record');
   await page.waitForFunction(() => window.AlgoAnimate.diagnostics().recording);
   assert.equal(await page.isDisabled('#orientation'), true);
   assert.equal(await page.isDisabled('#connectTab'), true);
   assert.equal(await page.isDisabled('#includeWaveform'), true);
-  await page.waitForTimeout(2400); await page.click('#stopRecording');
+  await page.waitForTimeout(10000); await page.click('#stopRecording');
   await page.waitForFunction(() => window.AlgoAnimate.diagnostics().recordedBytes > 10000 && !window.AlgoAnimate.diagnostics().recordingBusy);
   assert.equal((await state()).source, 'demo', 'Stopping a take retains the sound source');
   const firstPath = resolve(results, 'demo-landscape.webm');
   const first = await download(firstPath); checkTake(first, 1400, 1000);
+  const decodedFrames = execFileSync('ffmpeg', ['-v', 'error', '-i', firstPath, '-an', '-vf', 'fps=10,scale=200:-1', '-f', 'framemd5', '-'], { encoding: 'utf8' })
+    .split('\n').filter(line => line && !line.startsWith('#')).map(line => line.split(',').at(-1).trim());
+  assert.ok(decodedFrames.length > 70, 'Export contains frames across several drawing cycles');
+  assert.ok(new Set(decodedFrames).size > decodedFrames.length * 0.95, 'Recorded artwork keeps moving');
+  const freeze = spawnSync('ffmpeg', ['-hide_banner', '-i', firstPath, '-an', '-vf', 'freezedetect=n=-60dB:d=0.35', '-f', 'null', '-'], { encoding: 'utf8' });
+  assert.equal(freeze.status, 0); assert.ok(!freeze.stderr.includes('freeze_start'), 'Video has no held still-image intervals');
   const volume = spawnSync('ffmpeg', ['-hide_banner', '-i', firstPath, '-af', 'volumedetect', '-vn', '-f', 'null', '-'], { encoding: 'utf8' });
   assert.equal(volume.status, 0, 'Recorded audio decodes successfully');
   const meanVolume = volume.stderr.match(/mean_volume:\s*(-?[\d.]+) dB/);
@@ -133,6 +179,12 @@ try {
   assert.equal((await state()).source, null);
   await page.setInputFiles('#fileInput', { name: 'test-tone.wav', mimeType: 'audio/wav', buffer: wav() });
   await page.waitForFunction(() => window.AlgoAnimate.diagnostics().source === 'file' && window.AlgoAnimate.diagnostics().features.level > 0.1);
+  await page.evaluate(() => document.getElementById('filePlayer').pause());
+  await page.waitForTimeout(100);
+  const pausedProgress = (await state()).drawing.progress;
+  await page.waitForTimeout(250);
+  assert.equal((await state()).drawing.progress, pausedProgress, 'Pausing a file holds the drawing frame');
+  await page.evaluate(() => document.getElementById('filePlayer').play());
   await page.waitForFunction(() => window.AlgoAnimate.diagnostics().source === null, null, { timeout: 8000 });
   await page.evaluate(() => document.getElementById('filePlayer').play());
   await page.waitForFunction(() => window.AlgoAnimate.diagnostics().source === 'file' && window.AlgoAnimate.diagnostics().features.level > 0.1);
@@ -151,7 +203,8 @@ try {
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'Narrow mobile has no horizontal overflow');
   await page.screenshot({ path: resolve(results, 'mobile-landscape.png'), fullPage: true });
   assert.deepEqual(errors, [], 'No uncaught application errors');
-  const summary = { version: '0.01', desktop: 'passed', engines: 8, demoAnalysis: 'passed',
+  const summary = { version: '0.02', desktop: 'passed', engines: 8, demoAnalysis: 'passed',
+    continuousMarkerDrawing: enginesInMotion, noVideoHolds: 'passed',
     videoAudioExport: 'passed', portraitWaveform: 'passed', permissionRecovery: 'passed',
     fileReplayAndAutoFinish: 'passed', mobileWidths: [360, 390], errors, state: await state(),
     landscapeExport: first.streams.map(({ codec_name, codec_type, width, height }) => ({ codec_name, codec_type, width, height })) };

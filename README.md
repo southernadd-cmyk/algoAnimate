@@ -1,4 +1,4 @@
-# ALGO / ANIMATE — v0.01
+# ALGO / ANIMATE — v0.02
 
 **Make sound visible.** A browser-only audio experiment using the golden ratio
 and ALGO / ART's expressive marker renderer.
@@ -12,7 +12,7 @@ and ALGO / ART's expressive marker renderer.
    use **Browser tab** to select a playing tab and enable **Share tab audio**.
 2. Watch the incoming waveform and the live artwork. Choose any of eight AlgoArt
    engines, a palette and landscape or portrait paper.
-3. Adjust sensitivity, movement, composition-change interval and smoothing.
+3. Adjust sensitivity, pen response, drawing-cycle duration and smoothing.
    **Gentle motion** starts enabled if your system requests reduced motion.
 4. Click **Record**, then **Stop recording** and **Download video**. Recordings
    contain the artwork and sound; optionally include the waveform. A take stops
@@ -40,13 +40,20 @@ its actual container. The canvas shape is preserved (1400 × 1000 landscape or
   changes. A short, quantised history of those measurements generates changing
   seeds, with no timestamp or random salt.
 - AlgoArt V7 generates genuine φ compositions and marker paths. New compositions
-  are built in a worker where supported, then crossfaded on the main canvas.
-- Bass moves larger forms; midrange rotates marks; treble moves finer forms.
-  Marker paths persist between seed changes, so small audio changes do not force
-  a complete redraw of the composition. Silence holds the seed and settles the
-  motion. A steady sound eventually holds its seed while its marks can move.
-- Smoothing uses elapsed time. The composition interval limits seed updates;
-  it does not guarantee a different composition on every beat.
+  are built in a worker where supported. Three pen timelines draw the original
+  marker paths progressively by arc length, including exact partial cubic
+  curves, wobble, overdraw, ink colours, opacity and dryness.
+- Ink stays in place after it is drawn. Older strokes recede from their start
+  while fresh ink grows from the pen tips, so the paper keeps changing without
+  whole-image holds or crossfades. A new sound-derived composition is prepared
+  during the current drawing and picked up on the next pen cycle.
+- Loudness and spectral changes control pen pace; bass adds pressure to larger
+  strokes and treble to finer marks. Pressure is captured when each stroke
+  begins, so completed marks do not float or pulse around the paper.
+- Smoothing and pen progress use elapsed time. A steady or silent connected
+  source keeps the pens working with its current seed; new sound changes the
+  seed. Pausing a file or disconnecting freezes the actual drawing frame.
+  Gentle motion slows the pens and reduces their pressure response.
 - Canvas video and a clone of the Web Audio recording track are combined into a
   `MediaStream`. Stopping a take preserves the connected sound source. Chrome's
   streaming WebM export receives duration metadata so players report its length;
@@ -54,7 +61,7 @@ its actual container. The canvas shape is preserved (1400 × 1000 landscape or
 
 The mapping is deterministic for the **same ordered feature measurements and
 settings**. Live capture timing, noise, sample rates and browser FFT behaviour
-can differ, so v0.01 does not promise bit-identical videos across devices or
+can differ, so v0.02 does not promise bit-identical videos across devices or
 mathematical uniqueness for every possible sound. Frame rate targets 30 FPS and
 depends on the device, engine and number of marks. This is a prototype.
 
@@ -86,7 +93,8 @@ npm test
 ```
 
 GitHub Actions also runs a Chromium smoke test covering every composition
-engine, live demo analysis, recording with audio, waveform export, source
+engine, continuous marker drawing between seed changes, live demo analysis,
+recording with audio, waveform export, source
 cleanup, permission errors, audio-file replay, portrait rendering and mobile
 layout. It inspects the exported video with `ffprobe`, saves screenshots and a
 sample take as workflow artifacts, then deploys only after those checks pass.
