@@ -227,6 +227,9 @@ async function checkSparseComposition() {
         assertScenes(scenes);
         const canvas = document.createElement('canvas'), art = new LayeredArtwork(canvas);
         art.setScenes(scenes, true);
+        // Compare composition density at full drawing cadence. The intentional
+        // clean-sheet introduction has its own test and would skew coverage.
+        art.entryFinished = true;
         const thumb = document.createElement('canvas'); thumb.width = 350; thumb.height = 250;
         const ctx = thumb.getContext('2d', { willReadFrequently: true });
         let totalInk = 0, totalCoverage = 0, drawingFrames = 0;
