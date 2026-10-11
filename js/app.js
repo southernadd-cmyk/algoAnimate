@@ -4,7 +4,7 @@ import { SceneBuilder, DEFAULT_SETTINGS } from './scenes.js';
 import { LayeredArtwork, ensembleSettings } from './ensemble.js';
 import { VideoRecorder, MAX_TAKE_SECONDS } from './recording.js';
 import { StyleDeck, styleSettings } from './styles.js';
-import { BandMeters, BAND_KEYS } from './meters.js';
+import { BandMeters, BAND_KEYS, meterLevel } from './meters.js';
 
 const $ = id => document.getElementById(id);
 const art = $('art'), waveform = $('waveform'), player = $('filePlayer');
@@ -40,6 +40,7 @@ const layerControls = artwork.voices.map(({ route }) => {
   kit.append(pen, palette, swatches);
   const meter = document.createElement('meter'); meter.min = 0; meter.max = 1; meter.value = 0;
   meter.setAttribute('aria-label', route.name + ' response to ' + route.label);
+  meter.title = route.label + ' input response';
   row.append(heading, label, sample, kit, meter); $('engineLayers').append(row);
   return { row, meter, state, sample, swatches, palette, pen, styleToken: null };
 });
@@ -290,6 +291,12 @@ $('snapshot').addEventListener('click', () => {
     link.click(); setTimeout(() => URL.revokeObjectURL(url), 30000);
   }, 'image/png');
 });
+$('clearCanvas').addEventListener('click', () => {
+  artwork.clearInk();
+  message(audio.kind
+    ? 'Canvas cleared. Your audio is still connected; fresh marks will follow the sound.'
+    : 'Canvas cleared. Connect audio to draw again.');
+});
 $('fullscreen').addEventListener('click', async () => {
   try {
     if (document.fullscreenElement) await document.exitFullscreen();
@@ -320,9 +327,19 @@ function updateUI(now) {
   $('seed').textContent = artwork.drawnSeed || DEFAULT_SETTINGS.seed;
   $('sceneCount').textContent = String(artwork.sceneCount).padStart(2, '0');
   $('activeLayers').textContent = artwork.voices.filter(voice => voice.flowing).length + ' / 8 DRAWING';
+  // Engine card bars display routed input response, not spectral bin averages.
+  const routedLevels = {
+    bass: bandMeters.bands.bass.level, mid: bandMeters.bands.mid.level,
+    treble: bandMeters.bands.treble.level, level: meterLevel(features.rms),
+    centroid: clamp(features.centroid / 0.7), flux: clamp(features.flux * 3)
+  };
   for (let index = 0; index < artwork.voices.length; index++) {
     const voice = artwork.voices[index], controls = layerControls[index];
-    controls.meter.value = voice.sound.features.level;
+    const response = features.active
+      ? voice.route.inputs.reduce((sum, key) => sum + routedLevels[key], 0) / voice.route.inputs.length
+      : 0;
+    controls.meter.value = response;
+    controls.meter.setAttribute('aria-valuetext', Math.round(response * 100) + '% input response');
     controls.row.classList.toggle('drawing', voice.flowing);
     controls.state.textContent = voice.flowing ? 'Drawing' : 'Holding';
     controls.row.title = voice.flowing ? 'Drawing from ' + voice.route.label.toLowerCase() : 'Ink held; listening for ' + voice.route.label.toLowerCase();
@@ -389,7 +406,7 @@ window.addEventListener('pagehide', () => { if (recorder.active) recorder.stop()
 
 // Small read-only diagnostics surface for smoke tests and bug reports.
 window.AlgoAnimate = Object.freeze({
-  version: '0.07',
+  version: '0.08',
   diagnostics: () => ({
     source: audio.kind, audio: audio.diagnostics(), seed: artwork.drawnSeed, engine: 'ensemble',
     engines: artwork.diagnostics(), compositions: artwork.sceneCount,
@@ -399,7 +416,7 @@ window.AlgoAnimate = Object.freeze({
     bandMeters: { scale: [-60, 0], ...bandMeters.bands },
     recording: recorder.active, recordingBusy: recorder.busy,
     recordedBytes: recorder.result?.blob.size || 0, recordingType: recorder.result?.type || recorder.mimeType,
-    drawing: { ...artwork.stats, pens: 24,
+    drawing: { ...artwork.stats, blank: artwork.voices.every(voice => voice.art.blank), pens: 24,
       queuedSeed: artwork.voices.find(voice => voice.art.queued)?.art.queued.seed || null, flowing: artwork.flowing },
     fps, maxTakeSeconds: MAX_TAKE_SECONDS
   })

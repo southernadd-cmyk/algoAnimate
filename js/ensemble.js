@@ -91,6 +91,14 @@ export class LayeredArtwork {
       voice.requestedSeed = voice.art.drawnSeed || 'SOUND-READY';
     }
   }
+  clearInk() {
+    for (const voice of this.voices) {
+      voice.generation++; voice.building = false; voice.pendingStyle = null;
+      voice.art.clearInk(); voice.sound.reset(); voice.flowing = false;
+      voice.firstSoundSeed = true; voice.lastSceneTime = -1;
+      voice.requestedSeed = voice.art.drawnSeed || 'SOUND-READY';
+    }
+  }
   setScenes(scenes, immediate = false) {
     this.paperScene = scenes[0];
     for (let index = 0; index < this.voices.length; index++) {
@@ -101,7 +109,7 @@ export class LayeredArtwork {
       // Do not render eight unrelated ready-state posters over the audio art.
       // Explicit paper/ink controls rebuild at the held pen position, so an
       // orientation change during silence does not replace the art with blank paper.
-      if (!art.layers.length) art.layers = [art.layer(art.current, progress)];
+      if (!art.layers.length && !art.blank) art.layers = [art.layer(art.current, progress)];
     }
   }
   updateSignals(features, dt, available) {

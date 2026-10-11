@@ -396,6 +396,11 @@ try {
   console.log('Real bass-only and mid-only audio independently move their assigned engine layers.');
   const calibratedMeters = {};
   for (const key of ['bass', 'mid', 'treble']) calibratedMeters[key] = await checkBandMeter(key);
+  for (const [band, engine] of Object.entries({ bass: 'field', mid: 'rects', treble: 'burst' })) {
+    await setCapturedBands({ [band]: 0.2 }); await page.waitForTimeout(350);
+    const value = await page.locator('.engine-row[data-engine="' + engine + '"] meter').evaluate(node => node.value);
+    assert.ok(value > 0.45, engine + ' meter visibly responds to a real ' + band + ' tone (' + value + ')');
+  }
   const fills = Object.values(calibratedMeters).map(meter => meter.fill);
   assert.ok(Math.max(...fills) - Math.min(...fills) < 0.025, 'Equal-level tones use equal meter scales regardless of band width');
   const trebleStart = (await state()).engines; await page.waitForTimeout(300);
@@ -426,7 +431,15 @@ try {
   await page.waitForFunction(() => window.AlgoAnimate.diagnostics().engines.every(engine => engine.inkLength > 0), null, { timeout: 15000 });
   const tabSilenceStopMs = await silenceCapturedTab();
   await page.waitForFunction(() => document.getElementById('liveLabel').textContent.includes('DRAWING PAUSED'));
+  await page.click('#clearCanvas'); await page.waitForTimeout(150);
+  const clearState = await state();
+  assert.equal(clearState.source, 'tab', 'Clearing ink preserves connected audio');
+  assert.equal(clearState.drawing.blank, true, 'Ink stays cleared during captured silence');
+  assert.equal(clearState.drawing.layers, 0, 'All drawing layers are removed');
+  assert.equal(clearState.drawing.inkLength, 0, 'No old strokes return after a frame');
   await resumeCapturedTab();
+  await page.waitForFunction(() => window.AlgoAnimate.diagnostics().drawing.inkLength > 0, null, { timeout: 8000 });
+  assert.equal((await state()).drawing.blank, false, 'Sound resumes new ink without reconnecting');
   console.log(`Captured audio pauses/resumes the actual ink; silence stopped drawing in ${Math.round(tabSilenceStopMs)} ms.`);
 
   const defaultMotion = await motionSamples(60, 100);
@@ -613,7 +626,7 @@ try {
   assert.ok(await page.locator('#playDemo').evaluate(element => element.getBoundingClientRect().bottom < innerHeight), 'Mobile source controls are in the first viewport');
   assert.ok(await page.evaluate(() => Math.abs(document.getElementById('connectTab').getBoundingClientRect().top
     - document.getElementById('chooseFile').getBoundingClientRect().top) < 1), 'Mobile source buttons share one row');
-  for (const selector of ['#connectTab', '#chooseFile', '#playDemo', '#snapshot', '#orientation', '#closePreview']) {
+  for (const selector of ['#connectTab', '#chooseFile', '#playDemo', '#snapshot', '#clearCanvas', '#orientation', '#closePreview']) {
     if (selector === '#closePreview') continue;
     assert.ok(await page.locator(selector).evaluate(element => element.getBoundingClientRect().height >= 44), selector + ' has a usable touch target');
   }
@@ -628,9 +641,10 @@ try {
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'Narrow mobile has no horizontal overflow');
   await page.screenshot({ path: resolve(results, 'mobile-landscape.png'), fullPage: true });
   assert.deepEqual(errors, [], 'No uncaught application errors');
-  const summary = { version: '0.07', desktop: 'passed', engines: 8, pens: 24, minimumMeasuredFPS: measuredFPS,
+  const summary = { version: '0.08', desktop: 'passed', engines: 8, pens: 24, minimumMeasuredFPS: measuredFPS,
     compositionDensity, audioFidelity,
     calibratedMeters, quietTreble, demoBandPeaks, meterSilenceAndSensitivity: 'passed',
+    responsiveEngineMeters: 'passed', clearCanvasKeepsAudio: 'passed',
     distinctNativePensAndPalettes: 'passed', styleChanges, steadyToneFreshKits: 'passed', keyboardControls: 'passed',
     realAudioBandIsolation: 'passed', demoAnalysis: 'passed',
     continuousMarkerDrawing: enginesInMotion, noVideoHolds: 'passed', minimumChangedPixelsPer400ms: minimumChangedPixels,

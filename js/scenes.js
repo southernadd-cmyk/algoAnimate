@@ -78,6 +78,7 @@ export class AnimatedArtwork {
     this.queued = null;
     this.queuedSeconds = 0;
     this.flowing = false;
+    this.blank = false;
     this.speed = 1;
     this.turns = 0;
     this.stats = { progress: 0, penTips: 0, visiblePaths: 0, inkLength: 0 };
@@ -95,6 +96,12 @@ export class AnimatedArtwork {
   discardQueued() {
     this.queued = null; this.queuedSeconds = 0;
     if (this.activeLayer) this.current = this.activeLayer.scene;
+  }
+  clearInk() {
+    // Retain the composition, but no old layer may reappear during silence.
+    this.layers = []; this.queued = null; this.queuedSeconds = 0;
+    this.blank = true; this.flowing = false;
+    this.stats = { progress: 0, penTips: 0, visiblePaths: 0, inkLength: 0 };
   }
   setScene(scene, immediate = false, startNow = false) {
     const changedSize = this.canvas.width !== scene.width || this.canvas.height !== scene.height;
@@ -125,7 +132,12 @@ export class AnimatedArtwork {
     this.flowing = flowing;
     const memory = (this.current.inkMemory ?? 0.7) * (gentle ? 8 / 7 : 1);
     if (flowing) {
-      if (!this.layers.length) {
+      if (this.blank) {
+        // Resume on clean paper without replaying the cleared preview.
+        this.blank = false;
+        this.layers = [this.layer(this.current)];
+        this.turns++;
+      } else if (!this.layers.length) {
         // Clear the ready-state drawing along its strokes while the first
         // live drawing begins, rather than making it disappear in one frame.
         this.layers = [this.layer(this.current, 0, true), this.layer(this.current)];
@@ -157,7 +169,7 @@ export class AnimatedArtwork {
     ctx.globalAlpha = 1;
     this.stats = { progress: this.activeLayer?.age || 0, penTips: 0, visiblePaths: 0, inkLength: 0 };
     if (this.layers.length) for (const layer of this.layers) this.drawLayer(layer, features, response, gentle, memory, false, opacity);
-    else this.drawLayer(this.layer(this.current, 0, true), features, 0, gentle, memory, true, opacity);
+    else if (!this.blank) this.drawLayer(this.layer(this.current, 0, true), features, 0, gentle, memory, true, opacity);
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
   }
   drawLayer(layer, features, response, gentle, memory, still = false, opacity = 1) {

@@ -17,7 +17,7 @@
   <a class="skip-link" href="#sources">Skip to audio controls</a>
   <header class="masthead">
     <a class="brand" href="./" aria-label="AlgoAnimate home"><span class="phi">φ</span><span>ALGO<span class="slash">/</span>ANIMATE</span></a>
-    <div class="masthead-note"><span class="edition">v0.07 · LIVE DRAWING STUDIO</span><a href="https://southernadd-cmyk.github.io/algoart/" target="_blank" rel="noopener">From ALGO / ART ↗</a></div>
+    <div class="masthead-note"><span class="edition">v0.08 · LIVE DRAWING STUDIO</span><a href="https://southernadd-cmyk.github.io/algoart/" target="_blank" rel="noopener">From ALGO / ART ↗</a></div>
   </header>
   <main>
     <div class="intro"><div><p class="eyebrow">AN EXPERIMENT IN SOUND &amp; INK</p><h1>Sound, in living ink.</h1></div><p class="intro-note">One sound. Eight voices. 24 pens. <br>Every drawing finds a new colour.</p></div>
@@ -25,7 +25,7 @@
       <section class="workspace" aria-label="Live artwork and incoming sound">
         <div class="stage-heading"><span id="liveLabel" class="signal-state"><i aria-hidden="true"></i>WAITING FOR SOUND</span><span id="dimensions">1400 × 1000</span></div>
         <div class="stage" id="stage"><div class="paper"><canvas id="art" width="1400" height="1000" aria-label="Eight layered AlgoArt engines drawing from one live sound source"></canvas></div><span class="stage-corner" aria-hidden="true">φ / 24</span></div>
-        <div class="art-caption"><span id="seed">SOUND-READY</span><span><span id="fps">—</span> FPS <span class="caption-divider">/</span> <span id="sceneCount">00</span> DRAWINGS</span><button type="button" class="text-button" id="fullscreen" aria-label="Show artwork fullscreen">Full screen ↗</button></div>
+        <div class="art-caption"><span id="seed">SOUND-READY</span><span><span id="fps">—</span> FPS <span class="caption-divider">/</span> <span id="sceneCount">00</span> DRAWINGS</span><div class="canvas-actions"><button type="button" class="text-button" id="clearCanvas" aria-label="Clear the artwork while keeping audio connected">Clear canvas ↺</button><button type="button" class="text-button" id="fullscreen" aria-label="Show artwork fullscreen">Full screen ↗</button></div></div>
         <section class="recording-section" aria-label="Record and export artwork">
           <div class="record-bar"><div class="record-row"><button type="button" class="record-button" id="record" disabled><span aria-hidden="true">●</span> Record a take</button><button type="button" class="stop-record-button" id="stopRecording" hidden>■ Stop recording</button><span class="timecode" id="recordTime" aria-live="off">00:00</span></div><label class="check-label"><input type="checkbox" id="includeWaveform"> Include waveform</label><button type="button" class="snapshot-button" id="snapshot">Save frame ↓</button></div>
           <div class="record-meta"><p id="recordHint">Connect sound to record. Up to 3 minutes per take.</p><span class="format-badge" id="recordingFormat">VIDEO + AUDIO</span></div>
@@ -76,7 +76,7 @@
       </aside>
     </div>
   </main>
-  <footer><span>ALGO / ANIMATE <span class="footer-dot">·</span> v0.07</span><span>Sound stays in your browser. No account. No uploads.</span><a href="https://github.com/southernadd-cmyk/algoAnimate" target="_blank" rel="noopener">Source on GitHub ↗</a></footer>
+  <footer><span>ALGO / ANIMATE <span class="footer-dot">·</span> v0.08</span><span>Sound stays in your browser. No account. No uploads.</span><a href="https://github.com/southernadd-cmyk/algoAnimate" target="_blank" rel="noopener">Source on GitHub ↗</a></footer>
   <dialog id="previewDialog"><div class="dialog-heading"><h2>Your recorded take</h2><button type="button" id="closePreview" aria-label="Close recording preview">✕</button></div><video id="recordingPreview" controls playsinline></video></dialog>
   <script src="./vendor/algoart/phi.js"></script>
   <script src="./vendor/algoart/random.js"></script>
