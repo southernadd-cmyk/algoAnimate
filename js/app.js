@@ -20,6 +20,7 @@ const bandMeters = new BandMeters();
 const changeMeter = new SpectralChangeMeter();
 const soundGate = new SoundGate();
 let features = SILENCE, pending = false, fileURL = null, fileLabel = '', sourceLabel = '';
+let pendingSource = '';
 let layoutGeneration = 0, preparing = false;
 let clock = 0, previousFrame = 0, uiTime = 0, onsetUntil = 0, clearHoldUntil = 0;
 let frames = 0, fpsStart = performance.now(), fps = 0, recordingWithWaveform = false;
@@ -66,13 +67,13 @@ const recorder = new VideoRecorder({
 });
 const audio = new AudioInput({ onEnded: () => disconnect(true) });
 const demoPlaylist = new DemoPlaylist(demoPlayer, {
-  onTrack: (track, index) => {
+  onTrack: track => {
     sourceLabel = names.demo + ' · ' + track.title;
-    $('demoTrackNumber').textContent = String(index + 1).padStart(2, '0') + ' / 03';
     $('demoTrackLink').textContent = track.title;
     $('demoTrackLink').href = track.source;
     syncControls();
   },
+  onLoading: () => syncControls(),
   onError: error => {
     disconnect().then(() => message('Demo music could not load. Try the demo again or choose your own audio file. ' + error.message, true));
   }
@@ -81,11 +82,13 @@ const demoPlaylist = new DemoPlaylist(demoPlayer, {
 function syncControls() {
   frameClock.setRecording(recorder.active);
   const locked = pending || recorder.busy || startRecordPending;
+  const demoLoading = demoPlaylist.loading || (pending && pendingSource === names.demo);
   $('connectTab').disabled = locked || !navigator.mediaDevices?.getDisplayMedia;
   $('connectMic').disabled = locked || !navigator.mediaDevices?.getUserMedia;
   $('chooseFile').disabled = locked;
   $('fileInput').disabled = locked;
-  $('playDemo').disabled = locked;
+  $('playDemo').disabled = locked || demoLoading;
+  $('playDemo').setAttribute('aria-busy', String(demoLoading));
   $('stopAudio').disabled = !audio.kind || pending || startRecordPending;
   $('orientation').disabled = recorder.busy || startRecordPending;
   $('includeWaveform').disabled = recorder.busy || startRecordPending;
@@ -102,10 +105,13 @@ function syncControls() {
         : audio.kind ? 'Records artwork + sound. Up to 3 minutes per take.' : 'Connect sound to record. Up to 3 minutes per take.';
   $('sourceName').textContent = pending ? 'Connecting…' : audio.kind ? sourceLabel || names[audio.kind] || 'Audio file' : 'No audio connected';
   $('sourceDot').classList.toggle('active', Boolean(audio.kind));
-  $('demoButtonLabel').textContent = audio.kind === 'demo'
+  $('demoButtonLabel').textContent = demoLoading ? 'Loading track…' : audio.kind === 'demo'
     ? demoPlayer.paused ? 'Resume demo sound' : 'Demo playing' : 'Try demo sound';
+  $('demoTrackNumber').textContent = String(demoPlaylist.index + 1).padStart(2, '0')
+    + ' / ' + String(DEMO_TRACKS.length).padStart(2, '0');
   $('demoDeck').hidden = audio.kind !== 'demo';
-  $('nextDemo').disabled = pending || demoSwitching || audio.kind !== 'demo';
+  $('demoDeck').setAttribute('aria-busy', String(demoLoading));
+  $('nextDemo').disabled = pending || demoLoading || demoSwitching || audio.kind !== 'demo';
   player.hidden = !fileURL || (audio.kind !== 'file' && audio.kind !== null);
   player.inert = pending || recorder.busy;
 }
@@ -117,7 +123,7 @@ function resetSound() {
 
 async function connect(action, label) {
   if (pending || recorder.busy || startRecordPending) return;
-  pending = true; message(''); syncControls();
+  pending = true; pendingSource = label; message(''); syncControls();
   try {
     // action() is invoked synchronously so tab capture retains user activation.
     await action();
@@ -125,7 +131,7 @@ async function connect(action, label) {
     resetSound();
     message(audio.kind === 'tab' ? 'Connected. Return to your sound tab to control playback.' : 'Connected. Play some sound and watch the marks respond.');
   } catch (error) { message(describeCaptureError(error), true); }
-  finally { pending = false; syncControls(); }
+  finally { pending = false; pendingSource = ''; syncControls(); }
 }
 
 async function disconnect(ended = false) {

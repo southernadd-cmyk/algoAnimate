@@ -28,6 +28,16 @@ await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const browser = await chromium.launch(); // Default autoplay policy: a real click must start the demo.
 const errors = [], musicRequests = [];
 const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+let musicGate;
+await page.route('**/media/demo/*.mp3', async route => {
+  if (musicGate) await musicGate;
+  await route.continue();
+});
+function holdMusic() {
+  let release;
+  musicGate = new Promise(resolve => { release = resolve; });
+  return () => { musicGate = null; release(); };
+}
 page.on('pageerror', error => errors.push(error.message));
 page.on('request', request => { if (request.url().endsWith('.mp3')) musicRequests.push(request.url()); });
 const state = () => page.evaluate(() => window.AlgoAnimate.diagnostics());
@@ -42,8 +52,16 @@ try {
   assert.equal(await page.locator('.source-main > button').first().getAttribute('id'), 'playDemo');
   assert.equal(await page.locator('.source-button.primary').getAttribute('id'), 'playDemo');
   assert.equal(musicRequests.length, 0, 'Cold page loads do not download music or autoplay');
+  const releaseFirstTrack = holdMusic();
   await page.click('#playDemo');
+  assert.equal(await page.locator('#demoButtonLabel').textContent(), 'Loading track…');
+  assert.equal(await page.locator('#playDemo').getAttribute('aria-busy'), 'true');
+  releaseFirstTrack();
   await musicReady('Bubbles');
+  assert.equal(await page.locator('#demoButtonLabel').textContent(), 'Demo playing');
+  assert.equal(await page.locator('#playDemo').getAttribute('aria-busy'), 'false');
+  assert.equal(await page.locator('#demoTrackNumber').textContent(),
+    '01 / ' + String((await state()).demo.tracks).padStart(2, '0'));
   assert.equal((await state()).source, 'demo');
   assert.equal(await page.locator('#demoDeck').isVisible(), true);
   assert.match(await page.locator('#sourceName').textContent(), /Bubbles/);
@@ -58,8 +76,13 @@ try {
   await page.click('#record');
   await page.waitForFunction(() => window.AlgoAnimate.diagnostics().recording);
   await page.waitForTimeout(1200);
+  const releaseNextTrack = holdMusic();
   await page.click('#nextDemo');
+  assert.equal(await page.locator('#demoButtonLabel').textContent(), 'Loading track…');
+  assert.equal(await page.locator('#nextDemo').isDisabled(), true);
+  releaseNextTrack();
   await musicReady('Calm Current');
+  assert.equal(await page.locator('#demoButtonLabel').textContent(), 'Demo playing');
   assert.equal((await state()).recording, true, 'Skipping tracks preserves the live recording');
   await page.waitForTimeout(1200);
   // Seek close to a real media end; do not simulate an ended event in the browser.
