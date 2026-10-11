@@ -152,5 +152,9 @@ try {
   await browserSession.send('Browser.close').catch(() => {});
   await browser.close(); chrome.kill();
   await new Promise(resolve => server.close(resolve));
-  await rm(profile, { recursive: true, force: true });
+  // Chromium can finish writing its profile after the CDP connection closes.
+  // Scratch cleanup must not turn successful recording checks into a failure.
+  await rm(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }).catch(error => {
+    console.warn('Temporary browser profile cleanup:', error.code);
+  });
 }

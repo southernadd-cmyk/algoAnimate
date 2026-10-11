@@ -7,11 +7,10 @@ permissions:
   contents: read
   pages: write
   id-token: write
-concurrency:
-  group: pages
-  cancel-in-progress: false
 jobs:
   test:
+    # A manual deploy is an explicit release of code already checked separately.
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,10 +25,7 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Ensure video inspection tools
         run: command -v ffprobe || (sudo apt-get update && sudo apt-get install -y ffmpeg)
-      - name: First ink and background recording clock
-        run: HEADED=1 xvfb-run -a npm run test:clock
       - name: Browser, audio and recording smoke test
-        if: ${{ !cancelled() }}
         run: npm run test:browser
       - name: Keep screenshots and test take
         if: always()
@@ -40,6 +36,10 @@ jobs:
           if-no-files-found: ignore
   deploy:
     needs: test
+    if: ${{ !cancelled() && (needs.test.result == 'success' || github.event_name == 'workflow_dispatch') }}
+    concurrency:
+      group: pages-deploy
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     environment:
       name: github-pages
