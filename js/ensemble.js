@@ -58,10 +58,18 @@ export function ensembleSettings(route, seed, orientation, palette, density = 25
     overdraw: 2, grain: 9, ...styleSettings(style) };
 }
 
+// Introduce first ink a few strokes at a time, without changing each voice's
+// audio-derived seed, pressure or scheduling once the paper is underway.
+export const ENTRY_STAGGER_SECONDS = 0.09;
+export const ENTRY_RAMP_SECONDS = 0.45;
+export const ENTRY_DURATION_SECONDS = 1.25;
+
 export class LayeredArtwork {
   constructor(canvas) {
     this.canvas = canvas;
     this.context = canvas.getContext('2d', { alpha: false });
+    this.entrySeconds = 0;
+    this.entryFinished = false;
     this.voices = ENGINE_ROUTES.map(route => ({ route, art: new AnimatedArtwork(canvas),
       sound: new RoutedSound(route), flowing: false, building: false, generation: 0,
       pendingStyle: null, requestedSeed: 'SOUND-READY', firstSoundSeed: true, lastSceneTime: -1 }));
@@ -92,6 +100,8 @@ export class LayeredArtwork {
     }
   }
   clearInk() {
+    this.entrySeconds = 0;
+    this.entryFinished = false;
     for (const voice of this.voices) {
       voice.generation++; voice.building = false; voice.pendingStyle = null;
       voice.art.clearInk(); voice.sound.reset(); voice.flowing = false;
@@ -129,9 +139,19 @@ export class LayeredArtwork {
     for (const mark of scene.paperMarks) {
       ctx.fillStyle = mark.colour; ctx.fillRect(mark.x, mark.y, mark.w, mark.h);
     }
-    // Clear the paper once, then paint every engine's ink onto the same surface.
-    for (const voice of this.voices) voice.art.draw(voice.sound.features, dt, response,
-      gentle, cycle, voice.flowing, { paper: false, opacity: 0.72 });
+    // First ink grows in: voices enter one by one and the first pen movements
+    // ease to their normal sound-controlled speed. A pause later never restarts
+    // this introduction or moves any marks on the held paper.
+    const entering = !this.entryFinished;
+    if (entering && this.voices.some(voice => voice.flowing)) this.entrySeconds += dt;
+    for (const [index, voice] of this.voices.entries()) {
+      const elapsed = this.entrySeconds - index * ENTRY_STAGGER_SECONDS;
+      const canDraw = voice.flowing && (!entering || elapsed > 0);
+      const ease = entering ? 0.25 + 0.75 * clamp(elapsed / ENTRY_RAMP_SECONDS) : 1;
+      voice.art.draw(voice.sound.features, canDraw ? dt * ease : 0, response,
+        gentle, cycle, canDraw, { paper: false, opacity: 0.72 });
+    }
+    if (this.entrySeconds >= ENTRY_DURATION_SECONDS) this.entryFinished = true;
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
   }
   diagnostics() {

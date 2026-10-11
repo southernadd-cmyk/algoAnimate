@@ -362,10 +362,29 @@ try {
   console.log('All eight genuine composition engines are prepared together with 24 pen lanes.');
 
   const beforeSound = (await state()).compositions;
+  await page.evaluate(() => {
+    window.startupTrace = [];
+    const start = performance.now();
+    const sample = now => {
+      const s = window.AlgoAnimate.diagnostics();
+      window.startupTrace.push({ time: now - start, ink: s.drawing.inkLength,
+        voices: s.engines.filter(voice => voice.inkLength > 0).length,
+        compositions: s.compositions, elapsed: s.introduction.elapsed });
+      if (now - start < 1900) requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+  });
   await page.click('#playDemo');
   await page.waitForFunction(() => window.AlgoAnimate.diagnostics().features.level > 0.015, null, { timeout: 10000 });
   await page.waitForFunction(count => window.AlgoAnimate.diagnostics().compositions > count && window.AlgoAnimate.diagnostics().engines.some(engine => /^SOUND-[0-9A-F]{8}$/.test(engine.seed)), beforeSound, { timeout: 12000 });
   assert.equal((await state()).source, 'demo');
+  await page.waitForFunction(() => window.startupTrace?.at(-1)?.time > 1800, null, { timeout: 10000 });
+  const trace = await page.evaluate(() => window.startupTrace);
+  await writeFile(resolve(results, 'startup-frame-trace.json'), JSON.stringify(trace, null, 2));
+  assert.ok(trace.length > 6, 'Sound startup produces multiple rendered frames');
+  const firstInk = trace.find(frame => frame.ink > 0);
+  assert.ok(firstInk && firstInk.voices <= 2, 'First sound reveals a few strokes, not eight fully formed drawings');
+  assert.ok(trace.some(frame => frame.voices >= 3), 'Other first strokes enter progressively');
   await page.waitForFunction(() => window.AlgoAnimate.diagnostics().fps > 5, null, { timeout: 10000 });
   await page.screenshot({ path: resolve(results, 'desktop-live.png'), fullPage: true });
   console.log('Demo produces measured audio, a waveform and sound-derived composition changes.');
@@ -702,7 +721,7 @@ try {
     await touchContext.close();
   }
   assert.deepEqual(errors, [], 'No uncaught application errors');
-  const summary = { version: '0.09', desktop: 'passed', engines: 8, pens: 24, minimumMeasuredFPS: measuredFPS,
+  const summary = { version: '0.10', desktop: 'passed', engines: 8, pens: 24, minimumMeasuredFPS: measuredFPS,
     compositionDensity, audioFidelity,
     calibratedMeters, quietTreble, demoBandPeaks, meterSilenceAndSensitivity: 'passed',
     responsiveEngineMeters: 'passed', clearCanvasKeepsAudio: 'passed',

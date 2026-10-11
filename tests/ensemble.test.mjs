@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ENGINE_ROUTES, RoutedSound, LayeredArtwork } from '../js/ensemble.js';
+import { ENGINE_ROUTES, RoutedSound, LayeredArtwork,
+  ENTRY_STAGGER_SECONDS, ENTRY_DURATION_SECONDS } from '../js/ensemble.js';
 import { SILENCE } from '../js/features.js';
 
 const keys = ['level', 'bass', 'mid', 'treble', 'centroid', 'flux'];
@@ -71,6 +72,40 @@ function fixture() {
 }
 const full = sound(Object.fromEntries(keys.map(key => [key, 0.4])));
 
+test('first clean-sheet sound staggers ink and eases pen speeds without restarting existing strokes', () => {
+  const { art } = fixture();
+  art.updateSignals(full, 1 / 30, true); art.draw(1 / 30, 0.6, false, 4);
+  assert.equal(art.diagnostics().filter(voice => voice.inkLength > 0).length, 1,
+    'Exactly one voice introduces the first visible ink');
+  const firstLength = art.stats.inkLength;
+  for (let i = 0; i < 11; i++) {
+    art.updateSignals(full, 1 / 30, true); art.draw(1 / 30, 0.6, false, 4);
+  }
+  assert.ok(art.diagnostics().filter(voice => voice.inkLength > 0).length >= 4,
+    'More pens enter progressively over the opening four tenths of a second');
+  assert.ok(art.stats.inkLength > firstLength);
+  for (let i = 0; i < 36; i++) {
+    art.updateSignals(full, 1 / 30, true); art.draw(1 / 30, 0.6, false, 4);
+  }
+  assert.equal(ENTRY_STAGGER_SECONDS, 0.09);
+  assert.ok(art.entrySeconds >= ENTRY_DURATION_SECONDS && art.entryFinished);
+  assert.ok(art.diagnostics().every(voice => voice.inkLength > 0),
+    'All eight engines have started by the end of the introduction');
+  const positions = art.voices.map(voice => voice.art.activeLayer.age);
+  art.updateSignals(SILENCE, 0.1, false); art.draw(0.1, 0.6, false, 4);
+  assert.deepEqual(art.voices.map(voice => voice.art.activeLayer.age), positions,
+    'Silence freezes the ink rather than restarting it');
+  art.updateSignals(full, 1 / 30, true); art.draw(1 / 30, 0.6, false, 4);
+  assert.ok(art.voices.every((voice, index) => voice.art.activeLayer.age > positions[index]),
+    'Sound resumption advances all existing pens immediately');
+  art.clearInk();
+  assert.equal(art.entrySeconds, 0);
+  assert.equal(art.entryFinished, false);
+  art.updateSignals(full, 1 / 30, true); art.draw(1 / 30, 0.6, false, 4);
+  assert.equal(art.diagnostics().filter(voice => voice.inkLength > 0).length, 1,
+    'Clear Canvas also reveals fresh ink gradually');
+});
+
 test('switching sound sources invalidates old worker targets without clearing painted ink', () => {
   const { art } = fixture();
   art.updateSignals(full, 0.2, true); art.draw(0.2, 0.6, false, 4);
@@ -88,7 +123,9 @@ test('switching sound sources invalidates old worker targets without clearing pa
 
 test('paper and ink changes preserve each quiet engine pen position', () => {
   const { art } = fixture();
-  art.updateSignals(full, 0.35, true); art.draw(0.35, 0.6, false, 4);
+  for (let i = 0; i < 6; i++) {
+    art.updateSignals(full, 0.35, true); art.draw(0.35, 0.6, false, 4);
+  }
   art.updateSignals(SILENCE, 0.03, false); art.draw(0.03, 0.6, false, 4);
   const positions = art.voices.map(voice => voice.art.activeLayer.age);
   art.setScenes(art.voices.map(voice => ({ ...voice.art.current, width: 700, height: 1000 })), true);
@@ -103,7 +140,7 @@ test('all eight engines draw on one paper with 24 independent pen lanes and boun
   for (let i = 0; i < 150; i++) {
     commands.length = 0; art.updateSignals(full, 1 / 30, true); art.draw(1 / 30, 0.6, false, 1);
     assert.equal(commands.filter(command => command[0] === 'fillRect').length, 1, 'An engine cannot wipe another engine');
-    assert.ok(art.diagnostics().every(voice => voice.penTips > 0 && voice.inkLength > 0 && voice.layers <= 3));
+    if (i > 40) assert.ok(art.diagnostics().every(voice => voice.penTips > 0 && voice.inkLength > 0 && voice.layers <= 3));
     assert.equal(art.diagnostics().reduce((sum, voice) => sum + voice.pens, 0), 24);
   }
   const progress = art.voices.map(voice => voice.art.stats.progress);

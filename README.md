@@ -1,4 +1,4 @@
-# ALGO / ANIMATE — v0.07
+# ALGO / ANIMATE — v0.10
 
 **Sound, in living ink.** A browser-only audio experiment using the golden ratio
 and ALGO / ART's expressive marker renderer.
@@ -67,7 +67,14 @@ its actual container. The canvas shape is preserved (1400 × 1000 landscape or
   random salt. The two combined routes use both inputs for their seed and their
   average strength for the drawing response.
 - AlgoArt V7 generates genuine φ compositions and marker paths. New compositions
-  are built in a worker where supported. Three pen timelines per engine draw the original
+  and their marker arc-length geometry are prepared in the worker where supported,
+  leaving the animation thread to construct only the browser's Path2D objects.
+  On the first clean-sheet sound entrance, eight engines enter 90 ms apart and
+  their pen speed eases up over 450 ms, without altering the sound-derived seeds.
+  First sound-seeded replacements wait for the clean-sheet introduction to finish
+  rather than competing with the first frames. Pausing the audio subsequently
+  holds the ink and resumes immediately without replaying the entrance.
+  Three pen timelines per engine draw the original
   marker paths progressively by arc length, including exact partial cubic
   curves, wobble, overdraw, ink colours, opacity, dryness and portrait transforms.
   This provides 24 pen lanes across eight independent clocks. Layers draw into

@@ -392,6 +392,7 @@ function frame(now) {
   for (const voice of artwork.voices) {
     const seed = voice.sound.seed;
     if (!preparing && voice.flowing && voice.sound.features.active && !voice.building && seed !== 'SOUND-READY'
+      && (!voice.firstSoundSeed || artwork.entryFinished)
       && (voice.firstSoundSeed || voice.art.needsScene(cycle, $('gentle').checked))
       && clock - voice.lastSceneTime >= 0.25) {
       voice.lastSceneTime = clock; generateVoice(voice, seed);
@@ -412,7 +413,7 @@ window.addEventListener('pagehide', () => { if (recorder.active) recorder.stop()
 
 // Small read-only diagnostics surface for smoke tests and bug reports.
 window.AlgoAnimate = Object.freeze({
-  version: '0.09',
+  version: '0.10',
   diagnostics: () => ({
     source: audio.kind, audio: audio.diagnostics(), seed: artwork.drawnSeed, engine: 'ensemble',
     engines: artwork.diagnostics(), compositions: artwork.sceneCount,
@@ -422,6 +423,7 @@ window.AlgoAnimate = Object.freeze({
     bandMeters: { scale: [-60, 0], ...bandMeters.bands },
     recording: recorder.active, recordingBusy: recorder.busy,
     clearHold: performance.now() < clearHoldUntil,
+    introduction: { elapsed: artwork.entrySeconds, finished: artwork.entryFinished },
     recordedBytes: recorder.result?.blob.size || 0, recordingType: recorder.result?.type || recorder.mimeType,
     drawing: { ...artwork.stats, blank: artwork.voices.every(voice => voice.art.blank), pens: 24,
       queuedSeed: artwork.voices.find(voice => voice.art.queued)?.art.queued.seed || null, flowing: artwork.flowing },
