@@ -101,8 +101,7 @@ try {
   await page.waitForFunction(() => document.getElementById('message').textContent.includes('Canvas cleared'));
   await page.waitForFunction(() => getComputedStyle(document.getElementById('performanceControls')).opacity === '0');
   await page.screenshot({ path: resolve(results, 'performance.png') });
-  await page.keyboard.press('f');
-  if ((await state()).performance) await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
   await page.waitForFunction(() => !window.AlgoAnimate.diagnostics().performance);
   assert.equal(await page.locator('.masthead').isVisible(), true);
   assert.ok(await page.evaluate(() => window.wakeTest.releases >= 1));

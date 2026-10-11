@@ -526,13 +526,6 @@ $('clearCanvas').addEventListener('click', () => {
     ? 'Canvas cleared. Fresh ink will respond immediately to the sound.'
     : 'Canvas cleared. Connect audio to draw again.');
 });
-$('fullscreen').addEventListener('click', async () => {
-  try {
-    if (document.fullscreenElement) await document.exitFullscreen();
-    else if ($('stage').requestFullscreen) await $('stage').requestFullscreen();
-    else message('Full screen is unavailable in this browser.');
-  } catch { message('Full screen was not available.'); }
-});
 
 function updateUI(now) {
   $('clearCanvas').textContent = now < clearHoldUntil ? 'Canvas cleared ✓' : 'Clear canvas ↺';

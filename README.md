@@ -21,7 +21,7 @@ and ALGO / ART's expressive marker renderer.
    automatically after three minutes. **Save frame** offers screen PNG, 3× print PNG (4200 × 3000 landscape, tagged at 300 dpi) or vector SVG.
 
 5. **Save score** keeps the feature history and ink timeline captured with a take. **Load score** or **Replay** plays it without audio; pause, restart or seek, then export a frame.
-6. **Performance** hides the studio for projection. Move the pointer or tap to reveal controls; Escape exits. Space pauses the pens, R starts/stops recording, C clears and F toggles fullscreen. Shortcuts leave typing and focused controls alone.
+6. **Performance** hides the studio for projection. Move the pointer or tap to reveal controls; Escape exits. Space pauses the pens, R starts/stops recording, and C clears. Shortcuts leave typing and focused controls alone.
 7. **How it listens** overlays the eight input-to-pen mappings, measured band dBFS, RMS gate, spectral centroid and positive flux. The overlay is separate from frame and video exports.
 
 Projection and recording request a screen wake lock where the browser permits it; the studio reports whether it is awake, released, temporarily failed or unavailable. A lock is released when both activities end, and requested again on return to a visible tab.

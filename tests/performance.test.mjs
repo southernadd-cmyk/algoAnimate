@@ -37,5 +37,6 @@ test('shortcuts respect typing, focused controls, modifier keys and repeated pre
   assert.equal(shortcut({ key: ' ' }), 'pauseDrawing');
   assert.equal(shortcut({ key: 'c', target: { closest: () => ({}) } }), null);
   assert.equal(shortcut({ key: 'r', ctrlKey: true }), null);
-  assert.equal(shortcut({ key: 'f', repeat: true }), null);
+  assert.equal(shortcut({ key: 'f' }), null);
+  assert.equal(shortcut({ key: 'r', repeat: true }), null);
 });
