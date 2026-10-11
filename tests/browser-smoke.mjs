@@ -423,6 +423,8 @@ try {
   await page.waitForTimeout(200);
   await page.evaluate(() => scrollTo(0, 0));
   assert.ok(await page.locator('#playDemo').evaluate(element => element.getBoundingClientRect().bottom < innerHeight), 'Mobile source controls are in the first viewport');
+  assert.ok(await page.evaluate(() => Math.abs(document.getElementById('connectTab').getBoundingClientRect().top
+    - document.getElementById('chooseFile').getBoundingClientRect().top) < 1), 'Mobile source buttons share one row');
   for (const selector of ['#connectTab', '#chooseFile', '#playDemo', '#snapshot', '#orientation', '#closePreview']) {
     if (selector === '#closePreview') continue;
     assert.ok(await page.locator(selector).evaluate(element => element.getBoundingClientRect().height >= 44), selector + ' has a usable touch target');

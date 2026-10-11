@@ -20,7 +20,7 @@
     <div class="masthead-note"><span class="edition">v0.05 · LIVE DRAWING STUDIO</span><a href="https://southernadd-cmyk.github.io/algoart/" target="_blank" rel="noopener">From ALGO / ART ↗</a></div>
   </header>
   <main>
-    <div class="intro"><div><p class="eyebrow">AN EXPERIMENT IN SOUND &amp; INK</p><h1>Sound, in living ink.</h1></div><p class="intro-note">One sound. Eight voices. 24 pens.<br>Every drawing finds a new colour.</p></div>
+    <div class="intro"><div><p class="eyebrow">AN EXPERIMENT IN SOUND &amp; INK</p><h1>Sound, in living ink.</h1></div><p class="intro-note">One sound. Eight voices. 24 pens. <br>Every drawing finds a new colour.</p></div>
     <div class="studio">
       <section class="workspace" aria-label="Live artwork and incoming sound">
         <div class="stage-heading"><span id="liveLabel" class="signal-state"><i aria-hidden="true"></i>WAITING FOR SOUND</span><span id="dimensions">1400 × 1000</span></div>
@@ -46,8 +46,10 @@
         <section class="desk-section source-section" id="sources" tabindex="-1">
           <div class="section-label"><span>01 / AUDIO IN</span><h2>Find your sound.</h2></div>
           <p class="section-note">Connect a source. The pens take it from here.</p>
+          <div class="source-main">
           <button type="button" class="source-button primary" id="connectTab"><span class="button-icon" aria-hidden="true">↗</span><span>Browser tab<small>Share a tab and its audio</small></span><span aria-hidden="true">→</span></button>
           <button type="button" class="source-button" id="chooseFile"><span class="button-icon" aria-hidden="true">＋</span><span>Audio file<small>Play from your device</small></span><span aria-hidden="true">→</span></button>
+          </div>
           <input type="file" id="fileInput" accept="audio/*,.mp3,.wav,.ogg,.m4a,.flac,.aac,.webm,.mp4" hidden>
           <div class="source-pair"><button type="button" id="connectMic">Microphone</button><button type="button" id="playDemo">Try demo sound</button></div>
           <div class="source-summary"><span class="source-dot" id="sourceDot" aria-hidden="true"></span><span id="sourceName">No audio connected</span><button type="button" id="stopAudio" class="text-button" disabled>Disconnect</button></div>
