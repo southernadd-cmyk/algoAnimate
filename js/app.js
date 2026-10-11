@@ -6,9 +6,10 @@ import { VideoRecorder, MAX_TAKE_SECONDS } from './recording.js';
 import { StyleDeck, styleSettings } from './styles.js';
 import { BandMeters, SpectralChangeMeter, BAND_KEYS, meterLevel } from './meters.js';
 import { FrameClock } from './frame-clock.js';
+import { DemoPlaylist, DEMO_TRACKS } from './demo.js';
 
 const $ = id => document.getElementById(id);
-const art = $('art'), waveform = $('waveform'), player = $('filePlayer');
+const art = $('art'), waveform = $('waveform'), player = $('filePlayer'), demoPlayer = $('demoPlayer');
 const waveContext = waveform.getContext('2d');
 const recordingCanvas = document.createElement('canvas');
 const recordingContext = recordingCanvas.getContext('2d', { alpha: false });
@@ -22,9 +23,9 @@ let features = SILENCE, pending = false, fileURL = null, fileLabel = '', sourceL
 let layoutGeneration = 0, preparing = false;
 let clock = 0, previousFrame = 0, uiTime = 0, onsetUntil = 0, clearHoldUntil = 0;
 let frames = 0, fpsStart = performance.now(), fps = 0, recordingWithWaveform = false;
-let startRecordPending = false;
+let startRecordPending = false, demoSwitching = false;
 const waveHistory = [];
-const names = { tab: 'Browser tab audio', microphone: 'Microphone', demo: 'Demo · 108 BPM' };
+const names = { tab: 'Browser tab audio', microphone: 'Microphone', demo: 'Lo-fi demo' };
 const layerControls = artwork.voices.map(({ route }) => {
   const row = document.createElement('div'); row.className = 'engine-row'; row.dataset.engine = route.id;
   const heading = document.createElement('div'); heading.className = 'engine-title';
@@ -64,6 +65,18 @@ const recorder = new VideoRecorder({
   onError: error => message(error.message, true)
 });
 const audio = new AudioInput({ onEnded: () => disconnect(true) });
+const demoPlaylist = new DemoPlaylist(demoPlayer, {
+  onTrack: (track, index) => {
+    sourceLabel = names.demo + ' · ' + track.title;
+    $('demoTrackNumber').textContent = String(index + 1).padStart(2, '0') + ' / 03';
+    $('demoTrackLink').textContent = track.title;
+    $('demoTrackLink').href = track.source;
+    syncControls();
+  },
+  onError: error => {
+    disconnect().then(() => message('Demo music could not load. Try the demo again or choose your own audio file. ' + error.message, true));
+  }
+});
 
 function syncControls() {
   frameClock.setRecording(recorder.active);
@@ -89,7 +102,10 @@ function syncControls() {
         : audio.kind ? 'Records artwork + sound. Up to 3 minutes per take.' : 'Connect sound to record. Up to 3 minutes per take.';
   $('sourceName').textContent = pending ? 'Connecting…' : audio.kind ? sourceLabel || names[audio.kind] || 'Audio file' : 'No audio connected';
   $('sourceDot').classList.toggle('active', Boolean(audio.kind));
-  $('playDemo').textContent = audio.kind === 'demo' ? 'Demo connected' : 'Try demo sound';
+  $('demoButtonLabel').textContent = audio.kind === 'demo'
+    ? demoPlayer.paused ? 'Resume demo sound' : 'Demo playing' : 'Try demo sound';
+  $('demoDeck').hidden = audio.kind !== 'demo';
+  $('nextDemo').disabled = pending || demoSwitching || audio.kind !== 'demo';
   player.hidden = !fileURL || (audio.kind !== 'file' && audio.kind !== null);
   player.inert = pending || recorder.busy;
 }
@@ -105,7 +121,7 @@ async function connect(action, label) {
   try {
     // action() is invoked synchronously so tab capture retains user activation.
     await action();
-    sourceLabel = label;
+    sourceLabel = audio.kind === 'demo' ? names.demo + ' · ' + demoPlaylist.track.title : label;
     resetSound();
     message(audio.kind === 'tab' ? 'Connected. Return to your sound tab to control playback.' : 'Connected. Play some sound and watch the marks respond.');
   } catch (error) { message(describeCaptureError(error), true); }
@@ -122,7 +138,27 @@ async function disconnect(ended = false) {
 
 $('connectTab').addEventListener('click', () => connect(() => audio.tab(), names.tab));
 $('connectMic').addEventListener('click', () => connect(() => audio.microphone(), names.microphone));
-$('playDemo').addEventListener('click', () => connect(() => audio.demo(), names.demo));
+$('playDemo').addEventListener('click', () => {
+  if (audio.kind === 'demo') {
+    audio.ready().then(() => demoPlayer.play()).catch(error => message(error.message, true));
+    return;
+  }
+  connect(async () => {
+    await audio.demo(demoPlayer);
+    audio.cleanup = () => demoPlaylist.stop();
+    try { await demoPlaylist.start(); }
+    catch (error) { audio.stop(); throw error; }
+  }, names.demo);
+});
+$('nextDemo').addEventListener('click', async () => {
+  if (pending || demoSwitching || audio.kind !== 'demo') return;
+  demoSwitching = true; syncControls();
+  try { await demoPlaylist.next(); }
+  catch (error) { await disconnect(); message('The next demo track could not load. Try the demo again. ' + error.message, true); }
+  finally { demoSwitching = false; syncControls(); }
+});
+demoPlayer.addEventListener('play', () => syncControls());
+demoPlayer.addEventListener('pause', () => { soundGate.reset(); syncControls(); });
 $('stopAudio').addEventListener('click', () => disconnect());
 $('chooseFile').addEventListener('click', () => { if (!recorder.busy && !pending) $('fileInput').click(); });
 $('fileInput').addEventListener('change', event => {
@@ -316,7 +352,7 @@ $('fullscreen').addEventListener('click', async () => {
 function updateUI(now) {
   $('clearCanvas').textContent = now < clearHoldUntil ? 'Canvas cleared ✓' : 'Clear canvas ↺';
   const active = Boolean(audio.kind);
-  const paused = audio.kind === 'file' && player.paused;
+  const paused = Boolean(audio.mediaElement?.paused);
   const label = recorder.active ? 'RECORDING' : paused ? 'AUDIO PAUSED' : active && soundGate.open
     ? 'DRAWING · LIVE SOUND' : active ? 'SILENT · DRAWING PAUSED' : 'WAITING FOR SOUND';
   $('liveLabel').lastChild.textContent = label;
@@ -386,7 +422,7 @@ function frame(now) {
   features = data ? tracker.update(data.wave, data.frequencies, data.sampleRate, dt,
     +$('sensitivity').value / 100, +$('smoothing').value / 100) : SILENCE;
   if (features.beat) onsetUntil = now + 150;
-  const available = Boolean(audio.kind) && !(audio.kind === 'file' && player.paused);
+  const available = Boolean(audio.kind) && !audio.mediaElement?.paused;
   bandMeters.update(features.bandRms, dt, features.active, available && Boolean(data));
   changeMeter.sample(features.raw.flux, features.active, available && Boolean(data));
   const flowing = soundGate.update(features.active, dt, available && Boolean(data));
@@ -417,9 +453,11 @@ window.addEventListener('pagehide', () => { if (recorder.active) recorder.stop()
 
 // Small read-only diagnostics surface for smoke tests and bug reports.
 window.AlgoAnimate = Object.freeze({
-  version: '0.11',
+  version: '0.12',
   diagnostics: () => ({
     source: audio.kind, audio: audio.diagnostics(), seed: artwork.drawnSeed, engine: 'ensemble',
+    demo: audio.kind === 'demo' ? { title: demoPlaylist.track.title, index: demoPlaylist.index,
+      tracks: DEMO_TRACKS.length, paused: demoPlayer.paused, time: demoPlayer.currentTime } : null,
     engines: artwork.diagnostics(), compositions: artwork.sceneCount,
     paths: artwork.pathCount, worker: Boolean(builder.worker), building: isBuilding(),
     dimensions: [art.width, art.height], features: { level: features.level, bass: features.bass,

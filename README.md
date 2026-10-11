@@ -1,4 +1,4 @@
-# ALGO / ANIMATE — v0.11
+# ALGO / ANIMATE — v0.12
 
 **Sound, in living ink.** A browser-only audio experiment using the golden ratio
 and ALGO / ART's expressive marker renderer.
@@ -8,7 +8,7 @@ and ALGO / ART's expressive marker renderer.
 
 ## Try it
 
-1. Click **Try demo sound**, choose an **Audio file**, connect a **Microphone**, or
+1. Click **Try demo sound** for three rotating lo-fi tracks, choose an **Audio file**, connect a **Microphone**, or
    use **Browser tab** to select a playing tab and enable **Share tab audio**.
 2. Watch eight AlgoArt engines layer their marker strokes on one canvas.
    Each voice has its own pen profile and colour family, both randomised at
@@ -24,6 +24,15 @@ Recording uses a dedicated worker clock and explicitly captures each painted
 frame, so switching to the sound tab does not depend on the preview's animation
 callbacks. Files and recordings remain on your device; the application does not
 upload sound or require an account.
+
+The demo plays **Bubbles**, **Calm Current** and **Tokyo Sunset** by HoliznaCC0,
+from [Public Domain Lo-fi](https://holiznacc0.bandcamp.com/album/public-domain-lo-fi).
+The artist explicitly released the album under CC0. Tracks advance automatically
+and wrap around; **Next** skips a track, and the audio controls pause or seek.
+Music goes through the same analyser and recording path as an uploaded file.
+The MP3s are served with the site, require no API key or third-party playback
+service, and are fetched only when the demo is used. Only one track streams at
+a time. Source and licence details are in [media/demo/README.md](media/demo/README.md).
 
 ## Browser support
 
@@ -130,7 +139,7 @@ its actual container. The canvas shape is preserved (1400 × 1000 landscape or
   report actual processing settings where available, without device identifiers.
   Canvas video and a clone of the original captured audio track are combined into
   a `MediaStream`, preserving its channels and levels without passing through the
-  analysis graph. Files and the generated demo use the Web Audio destination.
+  analysis graph. Files and the lo-fi demo use the Web Audio destination.
   Stopping a take preserves the connected sound source. Chrome's
   streaming WebM export receives duration metadata so players report its length;
   the large media payload is preserved in Blob slices without re-encoding it.
@@ -148,7 +157,7 @@ pixels. The public palette hook is adapted in `js/ink-palette.js`, in both the
 worker and fallback renderer; no vendor source is modified.
 
 Live capture timing, noise, sample rates and browser FFT behaviour can differ,
-so v0.11 does not promise bit-identical videos across devices or mathematical
+so v0.12 does not promise bit-identical videos across devices or mathematical
 uniqueness for every possible sound. Frame rate targets 30 FPS and
 depends on the device, engine and number of marks. This is a prototype.
 
