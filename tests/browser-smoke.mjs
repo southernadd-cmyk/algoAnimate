@@ -136,8 +136,29 @@ try {
     .split('\n').filter(line => line && !line.startsWith('#')).map(line => line.split(',').at(-1).trim());
   assert.ok(decodedFrames.length > 70, 'Export contains frames across several drawing cycles');
   assert.ok(new Set(decodedFrames).size > decodedFrames.length * 0.95, 'Recorded artwork keeps moving');
-  const freeze = spawnSync('ffmpeg', ['-hide_banner', '-i', firstPath, '-an', '-vf', 'freezedetect=n=-60dB:d=0.35', '-f', 'null', '-'], { encoding: 'utf8' });
+  // Sparse pen lines change a small fraction of a mostly blank paper frame.
+  // Use a low noise threshold, plus a direct change measurement over 400 ms,
+  // rather than treating the small global average as a held photograph.
+  const freeze = spawnSync('ffmpeg', ['-hide_banner', '-i', firstPath, '-an', '-vf', 'freezedetect=n=-100dB:d=0.35', '-f', 'null', '-'], { encoding: 'utf8' });
   assert.equal(freeze.status, 0); assert.ok(!freeze.stderr.includes('freeze_start'), 'Video has no held still-image intervals');
+  const rawFrames = execFileSync('ffmpeg', ['-v', 'error', '-i', firstPath, '-an', '-vf', 'fps=10,scale=350:250', '-pix_fmt', 'rgb24', '-f', 'rawvideo', '-'], { maxBuffer: 64 * 1024 * 1024 });
+  const frameBytes = 350 * 250 * 3, rawCount = Math.floor(rawFrames.length / frameBytes);
+  assert.ok(rawCount > 70, 'Motion measurement covers the exported take');
+  let minimumChangedPixels = Infinity;
+  for (let frame = 0; frame < rawCount - 4; frame++) {
+    let changed = 0;
+    for (let pixel = 0; pixel < frameBytes; pixel += 3) {
+      const a = frame * frameBytes + pixel, b = (frame + 4) * frameBytes + pixel;
+      if (Math.abs(rawFrames[a] - rawFrames[b]) > 8 || Math.abs(rawFrames[a + 1] - rawFrames[b + 1]) > 8
+        || Math.abs(rawFrames[a + 2] - rawFrames[b + 2]) > 8) changed++;
+    }
+    minimumChangedPixels = Math.min(minimumChangedPixels, changed);
+  }
+  assert.ok(minimumChangedPixels > 100, 'Every 400 ms of exported video contains substantial visible pen movement');
+  const heldControl = spawnSync('ffmpeg', ['-hide_banner', '-i', firstPath, '-an', '-vf',
+    'tpad=stop_mode=clone:stop_duration=0.6,freezedetect=n=-100dB:d=0.35', '-f', 'null', '-'], { encoding: 'utf8' });
+  assert.equal(heldControl.status, 0);
+  assert.ok(heldControl.stderr.includes('freeze_start'), 'The detector still catches an intentionally frozen frame');
   const volume = spawnSync('ffmpeg', ['-hide_banner', '-i', firstPath, '-af', 'volumedetect', '-vn', '-f', 'null', '-'], { encoding: 'utf8' });
   assert.equal(volume.status, 0, 'Recorded audio decodes successfully');
   const meanVolume = volume.stderr.match(/mean_volume:\s*(-?[\d.]+) dB/);
@@ -210,7 +231,7 @@ try {
   await page.screenshot({ path: resolve(results, 'mobile-landscape.png'), fullPage: true });
   assert.deepEqual(errors, [], 'No uncaught application errors');
   const summary = { version: '0.02', desktop: 'passed', engines: 8, demoAnalysis: 'passed',
-    continuousMarkerDrawing: enginesInMotion, noVideoHolds: 'passed',
+    continuousMarkerDrawing: enginesInMotion, noVideoHolds: 'passed', minimumChangedPixelsPer400ms: minimumChangedPixels,
     videoAudioExport: 'passed', portraitWaveform: 'passed', permissionRecovery: 'passed',
     fileReplayAndAutoFinish: 'passed', mobileWidths: [360, 390], errors, state: await state(),
     landscapeExport: first.streams.map(({ codec_name, codec_type, width, height }) => ({ codec_name, codec_type, width, height })) };
