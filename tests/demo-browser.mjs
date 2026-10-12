@@ -58,6 +58,10 @@ const musicReady = title => page.waitForFunction(title => {
   return d.demo?.title === title && !d.demo.paused && d.features.active && d.drawing.inkLength > 0
     && document.getElementById('playDemo').getAttribute('aria-busy') === 'false';
 }, title, { timeout: 15000 });
+async function resumeDemo() {
+  const title = await page.locator('#demoTrackLink').textContent();
+  await page.click('#playDemo'); await musicReady(title);
+}
 try {
   await page.goto(`http://127.0.0.1:${server.address().port}/`);
   await page.waitForFunction(() => window.AlgoAnimate?.diagnostics().paths > 0);
@@ -236,7 +240,7 @@ try {
       focalChanges, newCompositions: afterDense.compositions - beforeDense.compositions, replay: 'exact SVG' };
     await writeFile(resolve(results, 'dense-recording-report.json'), JSON.stringify(report, null, 2));
     console.log('PASS: dense three-minute music recording, full score and exact replay.', report);
-    await page.click('#leaveReplay'); await page.click('#playDemo'); await musicReady('Bubbles');
+    await page.click('#leaveReplay'); await resumeDemo();
   }
   await page.screenshot({ path: resolve(results, 'desktop.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
@@ -246,7 +250,7 @@ try {
   await page.click('#stopAudio');
   assert.equal((await state()).source, null);
   assert.equal(await page.locator('#demoPlayer').getAttribute('src'), null);
-  await page.click('#playDemo'); await musicReady('Bubbles');
+  await resumeDemo();
   assert.deepEqual(errors, []);
   assert.ok(new Set(musicRequests).size === 3, 'All three bundled recordings are playable');
   console.log('PASS: solo/mute, overlay, performance, shortcuts, wake lock, vector/3x export, score pixel determinism, click-to-play, pause/resume, three tracks, real automatic advance, wrap, export sound, mobile and reconnect. Export RMS:', rms.toFixed(4));
