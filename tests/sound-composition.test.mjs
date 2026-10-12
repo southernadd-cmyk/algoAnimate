@@ -10,6 +10,8 @@ import { pngWithDpi } from '../js/png.js';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { renderComposition } from '../js/composition.js';
+import { prepareSceneGeometry } from '../js/ink.js';
+import { focalFromScene, softenSupportScene } from '../js/focal-hierarchy.js';
 
 const profile = value => ({ level: value, bass: value, mid: value, treble: value, centroid: value, flux: value });
 const settings = (id, value) => ensembleSettings(ENGINE_ROUTES.find(route => route.id === id), 'FIXED-SEED', 'landscape', 'marker', 50, null, profile(value));
@@ -166,4 +168,42 @@ test('all native engines render finite interlocked geometry in both orientations
   const bright = render(geometric, 'landscape', { ...profile(0.5), centroid: 1 });
   assert.ok(dark.filter(path => path.d.includes(' C ')).length > bright.filter(path => path.d.includes(' C ')).length,
     'Brightness changes actual native curve marks with the sound seed held fixed');
+
+  // Evaluate the actual eight-engine vector pipeline across different seeds and
+  // orientations, not just hand-written focal helper fixtures.
+  const focalInk = (scene, focal) => scene.paths.reduce((sum, entry) => {
+    const matrix = entry.transform?.match(/^matrix\(([^)]+)\)$/)?.[1].trim().split(/[ ,]+/).map(Number);
+    const inside = p => {
+      const x = matrix?.length === 6 ? matrix[0]*p.x+matrix[2]*p.y+matrix[4] : p.x;
+      const y = matrix?.length === 6 ? matrix[1]*p.x+matrix[3]*p.y+matrix[5] : p.y;
+      return Math.hypot((x-focal.x)/focal.rx,(y-focal.y)/focal.ry) <= 1;
+    };
+    for (const segment of entry.geometry.segments) {
+      for (const point of [segment.points[0],segment.points.at(-1)]) {
+        if (inside(point)) sum += entry.width*(entry.opacity ?? 1)/2;
+      }
+    }
+    return sum;
+  },0);
+  for (const orientation of ['landscape','portrait']) {
+    let dominant=0, originalSupports=0, softenedSupports=0;
+    for (let i=0; i<12; i++) {
+      const scenes=ENGINE_ROUTES.map(route => prepareSceneGeometry({
+        paths:render(route,orientation,profile(.5),'FOCAL-'+i),
+        width:A.W,height:A.H,markHierarchy:true,mode:route.id
+      }));
+      const lead=scenes[3], focal=focalFromScene(lead);
+      dominant+=focalInk(lead,focal);
+      scenes.forEach((scene,j) => {
+        if (j===3) return;
+        originalSupports+=focalInk(scene,focal);
+        softenedSupports+=focalInk(softenSupportScene(scene,focal),focal);
+      });
+    }
+    const before=dominant/(dominant+originalSupports);
+    const after=dominant/(dominant+softenedSupports);
+    assert.ok(after>before+.02,orientation+' focal dominance should improve: '+before.toFixed(3)+' -> '+after.toFixed(3));
+    assert.ok(after>.6,orientation+' lead must hold >60% focal ink: '+after.toFixed(3));
+  }
+
 });

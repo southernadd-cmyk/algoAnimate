@@ -2,6 +2,8 @@ name: Test and deploy Pages
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
@@ -41,6 +43,7 @@ jobs:
           path: test-results/
           if-no-files-found: ignore
   deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: test
     concurrency:
       group: pages-deploy

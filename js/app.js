@@ -10,7 +10,6 @@ import { FrameClock } from './frame-clock.js';
 import { DemoPlaylist, DEMO_TRACKS } from './demo.js';
 import { captureSheet, paintSheet, sheetSVG } from './export.js';
 import { ScoreCapture, ScoreReplay, parseScore, MAX_SCORE_BYTES } from './scores.js';
-import { focalFromScene, softenSupportScene } from './focal-hierarchy.js';
 import { ScreenAwake, shortcut } from './performance.js';
 import { ListeningOverlay } from './listening.js';
 import { pngWithDpi } from './png.js';
@@ -364,7 +363,6 @@ async function generateAll(immediate = false) {
   syncControls();
   try {
     const snapshots = artwork.voices.map(voice => voice.sound.profile && { ...voice.sound.profile });
-    const leadIndex = artwork.voices.findIndex(voice => voice.route.id === 'organic');
     const scenes = await Promise.all(artwork.voices.map(voice => {
       const style = voice.art.drawnStyle ? styleDeck.withMood(voice.art.drawnStyle, $('palette').value)
         : styleDeck.next(artwork.voices, $('palette').value, voice.sound.seed, voice.route.id, voice.sound.profile);
@@ -374,11 +372,7 @@ async function generateAll(immediate = false) {
     }));
     if (request !== layoutGeneration) return;
     if (scenes.some(scene => !scene.paths.length)) throw new Error('A layer did not produce any marker paths.');
-    const focal = focalFromScene(scenes[leadIndex]);
-    const composedScenes = scenes.map((scene, index) => index === leadIndex
-      ? scene : softenSupportScene(scene, focal));
-    artwork.focalRegion = focal;
-    artwork.setScenes(composedScenes, immediate);
+    artwork.setScenes(scenes, immediate);
     artwork.voices.forEach((voice, index) => { voice.lastCompositionProfile = snapshots[index]; });
     $('stage').classList.toggle('portrait', scenes[0].height > scenes[0].width);
     $('dimensions').textContent = scenes[0].width + ' × ' + scenes[0].height;
@@ -401,10 +395,7 @@ async function generateVoice(voice, seed) {
     const scene = await builder.build(settings(voice, seed, style));
     if (request !== voice.generation || layout !== layoutGeneration || !voice.flowing || !artwork.enabled(voice)) return;
     if (!scene.paths.length) throw new Error(voice.route.name + ' did not produce any marker paths.');
-    const composed = voice.route.id === 'organic' ? scene
-      : softenSupportScene(scene, artwork.focalRegion);
-    if (voice.route.id === 'organic') artwork.focalRegion = focalFromScene(scene);
-    voice.art.setScene(composed, false, voice.firstSoundSeed);
+    artwork.setVoiceScene(voice, scene, false, voice.firstSoundSeed);
     voice.lastCompositionProfile = snapshot;
     voice.firstSoundSeed = false;
   } catch (error) {

@@ -18,21 +18,6 @@ export function goldenLanePoint(width, height, index, count, lane, lanes = 8, ph
     y: height * (0.5 + Math.sin(angle) * 0.455 * radial), a: angle, rad: radial, slot };
 }
 
-// Shared ensemble focal reserve. Supporting voices shift candidate anchors out
-// of the lead's focal area, while retaining their assigned golden-angle lanes.
-// Native long strokes can still cross it; this is a compositional bias, not clipping.
-export function protectFocalAnchor(anchor, width, height, role = 'support') {
-  if (role === 'lead') return { ...anchor, x: width * 0.382 + (anchor.x - width * 0.382) * 0.42, y: height * 0.382 + (anchor.y - height * 0.382) * 0.42 };
-  const cx = width * 0.382, cy = height * 0.382;
-  const rx = width * 0.19, ry = height * 0.20;
-  const dx = (anchor.x - cx) / rx, dy = (anchor.y - cy) / ry;
-  const radius = Math.hypot(dx, dy);
-  if (radius >= 1) return anchor;
-  const angle = radius ? Math.atan2(dy, dx) : ((Number.isFinite(anchor.slot) ? anchor.slot : 0) + 1) * GOLDEN_ANGLE;
-  return { ...anchor, x: cx + Math.cos(angle) * rx * (1 + 0.55 * (1 - radius)),
-    y: cy + Math.sin(angle) * ry * (1 + 0.55 * (1 - radius)) };
-}
-
 export function interlockRenderer(A, settings) {
   if (!settings.interlock) return () => {};
   const { lane, lanes, phase = 0 } = settings.interlock;
