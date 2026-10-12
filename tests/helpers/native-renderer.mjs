@@ -1,3 +1,4 @@
+import { ALGOART_RENDERER_VERSION } from '../../js/renderer-version.js';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { renderComposition } from '../../js/composition.js';
@@ -21,7 +22,7 @@ export function nativeRenderer() {
     moveTo() {}, lineTo() {}, bezierCurveTo() {}, stroke() {}, setLineDash() {} };
   return (route, seed, { orientation = 'landscape', density = 100, profile, style = null, phase = 0, sharedAnchor = true } = {}) => {
     const settings = ensembleSettings(route, seed, orientation, 'marker', density, style, profile, phase);
-    A.rendererVersion = 7; A.svgRecorder = { precise: true, paths: [], paperMarks: [] };
+    A.rendererVersion = ALGOART_RENDERER_VERSION; A.svgRecorder = { precise: true, paths: [], paperMarks: [] };
     renderComposition(A, { getContext: () => context }, settings);
     return prepareEnsembleScene({ ...A.svgRecorder, mode: route.id, seed, style: settings.style,
       ensembleRole: settings.ensembleRole, interlock: settings.interlock, sharedAnchor,
