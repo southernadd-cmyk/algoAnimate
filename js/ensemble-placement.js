@@ -11,6 +11,23 @@ export function ensembleAnchor(width, height) {
   return { x: width * GOLDEN_LOW, y: height * GOLDEN_LOW, rx: width * .19, ry: height * .20 };
 }
 
+// φ derives the two entry stations on each paper edge. A scene's seeded
+// golden-angle direction selects the edge; the other axis sits at .382 or .618.
+// Keeping only a pen-safe inset avoids the empty band caused by fitting the
+// full native Growth geometry around an interior focal intersection.
+export function goldenEdgeEntrance(width, height, seed, rotation) {
+  const inset = Math.max(2, Math.min(width, height) * .005);
+  const fraction = hash(String(seed ?? '') + '|growth-edge-split') % 2
+    ? 1 - GOLDEN_LOW : GOLDEN_LOW;
+  const x = Math.cos(rotation), y = Math.sin(rotation);
+  if (Math.abs(x) >= Math.abs(y)) return {
+    x: x < 0 ? inset : width - inset, y: height * fraction,
+    side: x < 0 ? 'left' : 'right', fraction
+  };
+  return { x: width * fraction, y: y < 0 ? inset : height - inset,
+    side: y < 0 ? 'top' : 'bottom', fraction };
+}
+
 export function prepareEnsembleScene(scene) {
   if (!scene.ensembleRole || scene.sharedAnchor === false) return prepareSceneGeometry(scene);
   const prepared = prepareSceneGeometry({ ...scene, markHierarchy: false });
@@ -46,6 +63,11 @@ export function prepareEnsembleScene(scene) {
   const rotation = scene.ensembleRole === 'lead' && scene.mode === 'organic'
     ? GOLDEN_ANGLE * (hash(String(scene.seed ?? '') + '|growth-orientation') % 13) : 0;
   const cos = Math.cos(rotation), sin = Math.sin(rotation);
+  const edgeGrowth = scene.ensembleRole === 'lead' && scene.mode === 'organic'
+    && scene.width > scene.height;
+  const entrance = edgeGrowth ? goldenEdgeEntrance(scene.width, scene.height, scene.seed, rotation) : null;
+  const entrancePathIndex = edgeGrowth ? prepared.paths.findIndex(path =>
+    path.role === 'gesture' && (motif === undefined || path.motif === motif)) : -1;
   const relative = (p, m) => {
     const q = point(p, m), dx = q.x - source.x, dy = q.y - source.y;
     return { x: dx * cos - dy * sin, y: dx * sin + dy * cos };
@@ -79,10 +101,34 @@ export function prepareEnsembleScene(scene) {
         commands.push(target.x + p.x * scale, target.y + p.y * scale);
       }
     }
-    return { ...path, d: commands.join(' '), transform: undefined, geometry: undefined };
+    let d = commands.join(' ');
+    if (index === entrancePathIndex && commands[0] === 'M' && commands.length >= 6) {
+      // Extend the native opening Growth stroke rather than overlaying a
+      // decorative line. Its first pen now enters at a φ-position on the paper
+      // edge, then joins the original native curve with tangent continuity.
+      // This keeps the same path count, brush, motif and score identity.
+      const start = { x: +commands[1], y: +commands[2] };
+      const next = { x: +commands[4], y: +commands[5] };
+      const dx = start.x - entrance.x, dy = start.y - entrance.y;
+      const length = Math.hypot(dx, dy) || 1;
+      const direction = hash(String(scene.seed ?? '') + '|growth-edge-bend') % 2 ? 1 : -1;
+      const bend = direction * Math.min(length * GOLDEN_LOW * GOLDEN_LOW, Math.min(scene.width, scene.height) * .055);
+      const within = (value, limit) => Math.max(2, Math.min(limit - 2, value));
+      const c1 = {
+        x: within(entrance.x + dx * GOLDEN_LOW + (-dy / length) * bend, scene.width),
+        y: within(entrance.y + dy * GOLDEN_LOW + (dx / length) * bend, scene.height)
+      };
+      const c2 = {
+        x: within(start.x - (next.x - start.x) * GOLDEN_LOW, scene.width),
+        y: within(start.y - (next.y - start.y) * GOLDEN_LOW, scene.height)
+      };
+      d = ['M', entrance.x, entrance.y, 'C', c1.x, c1.y, c2.x, c2.y,
+        start.x, start.y, ...commands.slice(3)].join(' ');
+    }
+    return { ...path, d, transform: undefined, geometry: undefined };
   });
   return prepareSceneGeometry({ ...scene, paths,
     goldenFocal: scene.ensembleRole === 'lead' ? anchor : null,
-    placement: { anchor, target: { x: target.x, y: target.y }, scale, rotation,
+    placement: { anchor, target: { x: target.x, y: target.y }, scale, rotation, entrance,
       bridge: scene.ensembleRole === 'support' ? bridge : 0 } });
 }

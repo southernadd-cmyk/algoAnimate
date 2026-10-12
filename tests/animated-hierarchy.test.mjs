@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { nativeRenderer } from './helpers/native-renderer.mjs';
 import { visibleFocalInk } from './helpers/visible-ink.mjs';
 import { LayeredArtwork, ENGINE_ROUTES } from '../js/ensemble.js';
-import { ensembleAnchor, prepareEnsembleScene } from '../js/ensemble-placement.js';
+import { ensembleAnchor, goldenEdgeEntrance, prepareEnsembleScene } from '../js/ensemble-placement.js';
 import { SILENCE } from '../js/features.js';
 import { StyleDeck } from '../js/styles.js';
 import { GOLDEN_ANGLE } from '../js/phi-layout.js';
@@ -32,6 +32,36 @@ test('golden placement composes transforms, stays on paper, and accents a gestur
   assert.equal(free.goldenFocal,undefined);
 });
 
+test('landscape Growth begins at golden-section stations on all four paper edges', () => {
+  const width=1400,height=1000,seen=new Set();
+  const lead={ width,height, mode:'organic',ensembleRole:'lead',markHierarchy:true,
+    paths:[{d:'M 120 440 C 280 250 620 250 980 500',
+      width:3,opacity:.65,role:'gesture',motif:7}]};
+  const phiLow=1/((1+Math.sqrt(5))/2)**2;
+  for(let i=0;i<64;i++) {
+    const seed='EDGE-GROWTH-'+i,scene=prepareEnsembleScene({...lead,seed});
+    const entrance=scene.placement.entrance,root=scene.paths[0].geometry.segments[0].points[0];
+    const expected=goldenEdgeEntrance(width,height,seed,scene.placement.rotation);
+    assert.deepEqual(entrance,expected);
+    assert.ok(Math.hypot(root.x-entrance.x,root.y-entrance.y)<1e-6,
+      'the opening pen actually starts on the chosen edge');
+    assert.ok(Math.abs(entrance.fraction-phiLow)<1e-12 ||
+      Math.abs(entrance.fraction-(1-phiLow))<1e-12,
+      'only true golden-section splits are valid edge stations');
+    seen.add(entrance.side);
+    assert.equal(scene.paths.length,lead.paths.length,'edge entry must extend a native mark, not add a new path');
+    assert.deepEqual(scene.goldenFocal,ensembleAnchor(width,height));
+    for(const path of scene.paths)for(const segment of path.geometry.segments)
+      for(const p of segment.points){
+        assert.ok(p.x>=-1e-6&&p.x<=width+1e-6);
+        assert.ok(p.y>=-1e-6&&p.y<=height+1e-6);
+      }
+  }
+  assert.deepEqual([...seen].sort(),['bottom','left','right','top']);
+  const portrait=prepareEnsembleScene({...lead,width:1000,height:1400,seed:'EDGE-GROWTH-1'});
+  assert.equal(portrait.placement.entrance,null,'portrait composition retains its current native entrance');
+});
+
 test('Growth turns by sound-seeded golden angles without moving its fixed focal point', () => {
   for (const [width,height] of [[1400,1000],[1000,1400]]) {
     const source = {width,height,mode:'organic',ensembleRole:'lead',markHierarchy:true,
@@ -52,8 +82,9 @@ test('Growth turns by sound-seeded golden angles without moving its fixed focal 
       orientations.add(result.placement.rotation);
       for (const path of result.paths) for (const segment of path.geometry.segments)
         for (const p of segment.points) {
-          assert.ok(p.x>=width*.04-1e-5&&p.x<=width*.96+1e-5);
-          assert.ok(p.y>=height*.04-1e-5&&p.y<=height*.96+1e-5);
+          const inset = width > height ? Math.min(width,height)*.005 : Math.min(width,height)*.04;
+          assert.ok(p.x>=inset-1e-5&&p.x<=width-inset+1e-5);
+          assert.ok(p.y>=inset-1e-5&&p.y<=height-inset+1e-5);
         }
     }
     assert.ok(orientations.size>=8,'successive sound seeds must produce varied growth directions');
