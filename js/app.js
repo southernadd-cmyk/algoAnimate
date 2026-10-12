@@ -656,7 +656,7 @@ window.addEventListener('pagehide', () => { if (recorder.active) recorder.stop()
 
 // Small read-only diagnostics surface for smoke tests and bug reports.
 window.AlgoAnimate = Object.freeze({
-  version: '0.14',
+  version: '0.15',
   diagnostics: () => ({
     source: audio.kind, paused: drawingPaused, performance: performanceMode, wakeLock: awake.status,
     replay: replay ? { frame: replay.index, time: replay.time, paused: replay.paused, duration: replay.score.duration } : null,
