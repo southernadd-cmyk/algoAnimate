@@ -1,5 +1,7 @@
 import { prepareSceneGeometry } from './ink.js';
 import { focalFromScene } from './focal-hierarchy.js';
+import { hash } from './features.js';
+import { GOLDEN_ANGLE } from './phi-layout.js';
 
 const GOLDEN_LOW = 1 / ((1 + Math.sqrt(5)) / 2) ** 2;
 
@@ -38,12 +40,23 @@ export function prepareEnsembleScene(scene) {
     return m?.length === 6 && m.every(Number.isFinite) ? m : [1, 0, 0, 1, 0, 0];
   });
   const point = (p, m) => ({ x: m[0]*p.x + m[2]*p.y + m[4], y: m[1]*p.x + m[3]*p.y + m[5] });
-  // The control hull bounds every cubic. Fit once when a scene is built;
-  // marks never move afterwards, and no edge clamp can displace the anchor.
+  // Each sound-derived Growth composition takes a golden-angle orientation.
+  // This rotates the actual vector directions around the focal mass, not the
+  // entire canvas or the already-drawn ink. It stays fixed for the full phrase.
+  const rotation = scene.ensembleRole === 'lead' && scene.mode === 'organic'
+    ? GOLDEN_ANGLE * (hash(String(scene.seed ?? '') + '|growth-orientation') % 13) : 0;
+  const cos = Math.cos(rotation), sin = Math.sin(rotation);
+  const relative = (p, m) => {
+    const q = point(p, m), dx = q.x - source.x, dy = q.y - source.y;
+    return { x: dx * cos - dy * sin, y: dx * sin + dy * cos };
+  };
+  // Fit the rotated control hull, not the old horizontal one. Cubic control
+  // points stay within paper and don't need post-hoc clamping. Existing layers
+  // never move and saved scores hold the exact rotated path coordinates.
   let scale = 1;
   prepared.paths.forEach((path, index) => {
     for (const segment of path.geometry.segments) for (const p of segment.points) {
-      const q = point(p, matrices[index]), dx = q.x - source.x, dy = q.y - source.y;
+      const { x: dx, y: dy } = relative(p, matrices[index]);
       if (dx < 0) scale = Math.min(scale, (target.x - scene.width * .04) / -dx);
       if (dx > 0) scale = Math.min(scale, (scene.width * .96 - target.x) / dx);
       if (dy < 0) scale = Math.min(scale, (target.y - scene.height * .04) / -dy);
@@ -62,13 +75,14 @@ export function prepareEnsembleScene(scene) {
       const type = tokens[i++].toUpperCase(), count = { M: 1, L: 1, C: 3, Z: 0 }[type];
       commands.push(type);
       for (let j = 0; j < count; j++) {
-        const p = point({ x: +tokens[i++], y: +tokens[i++] }, matrices[index]);
-        commands.push(target.x + (p.x - source.x) * scale, target.y + (p.y - source.y) * scale);
+        const p = relative({ x: +tokens[i++], y: +tokens[i++] }, matrices[index]);
+        commands.push(target.x + p.x * scale, target.y + p.y * scale);
       }
     }
     return { ...path, d: commands.join(' '), transform: undefined, geometry: undefined };
   });
   return prepareSceneGeometry({ ...scene, paths,
     goldenFocal: scene.ensembleRole === 'lead' ? anchor : null,
-    placement: { anchor, target: { x: target.x, y: target.y }, scale, bridge: scene.ensembleRole === 'support' ? bridge : 0 } });
+    placement: { anchor, target: { x: target.x, y: target.y }, scale, rotation,
+      bridge: scene.ensembleRole === 'support' ? bridge : 0 } });
 }
