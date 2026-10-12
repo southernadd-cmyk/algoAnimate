@@ -3,6 +3,8 @@ import { markerGeometry } from './ink.js';
 import { layerStrokes } from './export.js';
 
 export const SCORE_FORMAT = 'algoanimate-score';
+export const SCORE_FORMAT_VERSION = 1;
+// Renderer is provenance, not a replay dependency: scores contain vector geometry.
 export const MAX_SCORE_BYTES = 20 * 1024 * 1024;
 const keys = ['level', 'bass', 'mid', 'treble', 'centroid', 'flux'];
 const packed = (value, scale) => Math.round(clamp(value || 0) * scale);
@@ -25,7 +27,7 @@ export class ScoreCapture {
   constructor(started, source = '') {
     this.started = started; this.bytes = 0;
     this.sceneIds = new WeakMap(); this.layerIds = new WeakMap(); this.paperIds = new WeakMap();
-    this.data = { format: SCORE_FORMAT, version: 1, renderer: 7, source,
+    this.data = { format: SCORE_FORMAT, version: SCORE_FORMAT_VERSION, renderer: 7, source,
       featureKeys: keys, scenes: [], layers: [], papers: [], frames: [], duration: 0 };
   }
   sceneId(scene) {
@@ -90,7 +92,7 @@ function validatePath(d) {
 export function parseScore(text) {
   if (typeof text !== 'string' || text.length > MAX_SCORE_BYTES) fail();
   const score = JSON.parse(text);
-  if (score?.format !== SCORE_FORMAT || score.version !== 1 || score.renderer !== 7) fail();
+  if (score?.format !== SCORE_FORMAT || score.version !== SCORE_FORMAT_VERSION || !Number.isInteger(score.renderer) || score.renderer < 1 || score.renderer > 1000) fail();
   array(score.frames, 5500); array(score.scenes, 5000); array(score.layers, 10000); array(score.papers, 200);
   if (!score.frames.length || !score.papers.length) fail();
   number(score.duration, 0, 180000);
