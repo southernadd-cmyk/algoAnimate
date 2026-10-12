@@ -1,3 +1,4 @@
+import { ALGOART_RENDERER_VERSION } from '../js/renderer-version.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ENGINE_ROUTES, LEAD_ROUTE_ID, RoutedSound, ensembleSettings, profileShift,
@@ -152,7 +153,7 @@ test('all native engines render finite interlocked geometry in both orientations
   function render(route, orientation, p, seed = 'NATIVE-FIXTURE') {
     const style = voices.find(voice => voice.route.id === route.id).pendingStyle;
     const s = ensembleSettings(route, seed, orientation, 'marker', 30, style, p);
-    A.rendererVersion = 7; A.svgRecorder = { precise: true, paths: [], paperMarks: [] };
+    A.rendererVersion = ALGOART_RENDERER_VERSION; A.svgRecorder = { precise: true, paths: [], paperMarks: [] };
     renderComposition(A, canvas, s);
     return A.svgRecorder.paths;
   }

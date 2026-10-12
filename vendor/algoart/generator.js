@@ -3156,6 +3156,77 @@ function drawOrganicV7(ctx,s,r,pal){
   return meta;
 }
 
+// V8: independent native geometry, so canvas, Reveal and SVG share the same
+// roots and directions. Never change the V1–V7 grammar above.
+function drawOrganicV8(ctx,s,r,pal){
+  var strategy=chooseStrategy(s),portrait=s.orientation==='portrait';
+  var organic=Object.assign({},s,{
+    curveBias:Math.max(ORGANIC_TUNING.style.minimumCurveBias,s.curveBias),
+    wobble:Math.max(ORGANIC_TUNING.style.minimumWobble,s.wobble)
+  });
+  var voids=makeReservedVoids(s,strategy,A.makeR(s.seed+'|organic-v8-voids'));
+  var placement=A.makeR(s.seed+'|organic-v8-placement');
+  var count=Math.min(4,1+Math.floor(s.elements/24)+(placement.chance(portrait?.55:.8)?1:0));
+  var edgeMode=placement.chance(.68),step=A.hash(s.seed+'|organic-v8-angle')%13;
+  var inset=Math.max(2,Math.min(A.W,A.H)*.005),roots=[],queue=[],segments=[];
+  var maxSegments=Math.max(12,s.elements),maxDepth=Math.min(7,3+Math.round(s.recursion*.6));
+  for(var i=0;i<count;i++){
+    var root,angle;
+    for(var attempt=0;attempt<16;attempt++){
+      angle=(step+i+attempt)*A.GOLD;
+      var dx=Math.cos(angle),dy=Math.sin(angle);
+      var fraction=(i+attempt+step)%2?A.INV:1-A.INV;
+      var edge=edgeMode||attempt>7;
+      if(edge){
+        // Enter opposite the direction of travel, at a golden edge station.
+        if(Math.abs(dx)>=Math.abs(dy))root={x:dx>0?inset:A.W-inset,y:A.H*fraction,edge:dx>0?'left':'right'};
+        else root={x:A.W*fraction,y:dy>0?inset:A.H-inset,edge:dy>0?'top':'bottom'};
+      }else{
+        // Interior roots sit on the golden intersection behind the direction of
+        // travel, so each form grows from a 38.2%/61.8% station across the page.
+        root={x:A.W*(dx>=0?1-A.INV:A.INV),y:A.H*(dy>=0?1-A.INV:A.INV),edge:null};
+      }
+      if(!pointInVoid(root.x,root.y,voids)&&!roots.some(function(p){return Math.hypot(p.x-root.x,p.y-root.y)<Math.min(A.W,A.H)*.12}))break;
+    }
+    if(pointInVoid(root.x,root.y,voids))continue;
+    root.angle=angle;roots.push(root);
+    // Hierarchy without tiny satellite plants; each root gets a full phrase.
+    var length=A.qphi(Math.max(A.W,A.H)*placement.range(.27,.36)/Math.pow(A.PHI,i*.3),34,s.phiStrength/100);
+    queue.push({x:root.x,y:root.y,angle:angle,len:length,depth:0,branch:roots.length-1});
+  }
+  while(queue.length&&segments.length<maxSegments){
+    var node=queue.shift(),ex,ey,angle,free=false,len=node.len;
+    // Retry golden turns and shorter lengths instead of clamping long branches
+    // into flattened strokes along the boundary or crossing reserved space.
+    for(var trial=0;trial<24;trial++){
+      angle=node.angle+(trial%8===0?0:(trial%2?1:-1)*Math.ceil((trial%8)/2)*A.GOLD/A.PHI);
+      var trialLen=len/Math.pow(A.PHI,Math.floor(trial/8));
+      ex=node.x+Math.cos(angle)*trialLen;ey=node.y+Math.sin(angle)*trialLen;
+      if(ex<inset||ex>A.W-inset||ey<inset||ey>A.H-inset)continue;
+      if(segmentCrossesVoid(node.x,node.y,ex,ey,voids))continue;
+      len=trialLen;free=true;break;
+    }
+    if(!free)continue;
+    var colour=pal[(node.branch+node.depth)%pal.length];
+    A.drawLine(ctx,{x:node.x,y:node.y},{x:ex,y:ey},colour,organic,r);
+    segments.push({x1:node.x,y1:node.y,x2:ex,y2:ey,depth:node.depth,branch:node.branch});
+    if(r.chance(organic.shapeAmount/ORGANIC_TUNING.details.budChanceDivisor)){
+      var rad=Math.max(4,len/Math.pow(A.PHI,4));
+      A.ellipse(ctx,{x:ex,y:ey},rad,rad/A.PHI,angle,pal[(node.branch+node.depth+1)%pal.length],organic,r);
+    }
+    if(node.depth>=maxDepth)continue;
+    var nextLen=len/A.PHI*r.range(.94,1.06);
+    if(nextLen<12)continue;
+    var branches=node.depth<2?2:(r.chance(.45+s.complexity/220)?2:1);
+    for(var b=0;b<branches;b++){
+      var sign=branches===1?r.sign():(b===0?-1:1);
+      var turn=A.GOLD*A.lerp(1/(A.PHI*A.PHI),1/A.PHI,s.complexity/100)*sign;
+      queue.push({x:ex,y:ey,angle:angle+turn,len:nextLen,depth:node.depth+1,branch:node.branch});
+    }
+  }
+  return{strategy:strategy,voids:voids,guide:{type:'organic',roots:roots,segments:segments,variant:edgeMode?'EDGE':'INTERIOR',goldenRotation:step*A.GOLD}};
+}
+
 function drawConstructedShape(ctx,item,index,s,r,pal,style){
   var shapes=enabledShapes(s);
   var nonLines=shapes.filter(function(sh){return sh!=='line'});
@@ -3828,6 +3899,9 @@ A.geometryOverlay=function(ctx,s,meta){
 };
 
 A.render=function(target,s,scale,showGeometry){
+  // Reject future/invalid renderer versions rather than silently drawing as the latest version.
+  if(A.supportedRendererVersions && !A.supportedRendererVersions.includes(A.rendererVersion))
+    throw new Error('Unsupported renderer version: '+A.rendererVersion);
   // Set logical dimensions for every render, including plugin/headless exports.
   // Absence of orientation preserves the original landscape format.
   A.W=s.orientation==='portrait'?1000:1400;
@@ -3859,7 +3933,7 @@ A.render=function(target,s,scale,showGeometry){
   }else if(s.mode==='scribble'){
     meta=drawScribble(ctx,s,r,pal);
   }else if(s.mode==='organic'){
-    meta=A.rendererVersion>=7?drawOrganicV7(ctx,s,r,pal):drawOrganic(ctx,s,r,pal);
+    meta=A.rendererVersion>=8?drawOrganicV8(ctx,s,r,pal):(A.rendererVersion>=7?drawOrganicV7(ctx,s,r,pal):drawOrganic(ctx,s,r,pal));
   }else if(s.mode==='geometric'){
     meta=drawGeometric(ctx,s,r,pal);
   }else{
