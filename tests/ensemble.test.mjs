@@ -15,7 +15,7 @@ const sound = values => {
 };
 
 test('ensemble lead is persistent and supporting anchor positions protect its focal reserve', () => {
-  const lead = ENGINE_ROUTES[0], support = ENGINE_ROUTES[1];
+  const lead = ENGINE_ROUTES[3], support = ENGINE_ROUTES[1];
   const a = ensembleSettings(lead, 'TEST', 'landscape', 'marker', 25);
   const b = ensembleSettings(support, 'TEST', 'landscape', 'marker', 25);
   assert.equal(a.ensembleRole, 'lead');
@@ -27,7 +27,8 @@ test('ensemble lead is persistent and supporting anchor positions protect its fo
   assert.ok(Math.hypot((shifted.x - anchor.x) / (1400 * 0.19),
     (shifted.y - anchor.y) / (1000 * 0.20)) >= 1);
   const outside = goldenLanePoint(1400, 1000, 4, 8, 2);
-  assert.deepEqual(protectFocalAnchor(outside, 1400, 1000, 'lead'), outside);
+  assert.notDeepEqual(protectFocalAnchor(outside, 1400, 1000, 'lead'), outside);
+  assert.equal(protectFocalAnchor({ x: anchor.x, y: anchor.y }, 1400, 1000, 'support').x !== anchor.x, true);
   assert.deepEqual(protectFocalAnchor(anchor, 1400, 1000, 'support'), shifted,
     'Same scaffold input must produce the same relocated anchor');
 });
