@@ -50,9 +50,11 @@ test('eight golden territories tile the entire paper in either orientation', asy
         assert.ok(overlap<1e-6,'regions must tessellate without hard overlaps');
       }
     }
-    assert.ok(Math.abs(cells[0].w/width-GOLDEN_SHARE)<1e-9
-      || Math.abs(cells[0].h/height-GOLDEN_SHARE**3)<1e-9,
-      'regions emerge from phi cuts rather than equal rectangular grid cells');
+    const firstFour=cells.slice(0,4);
+    const w=Math.max(...firstFour.map(r=>r.x+r.w))-Math.min(...firstFour.map(r=>r.x));
+    const h=Math.max(...firstFour.map(r=>r.y+r.h))-Math.min(...firstFour.map(r=>r.y));
+    assert.ok(Math.abs((width>=height?w/width:h/height)-GOLDEN_SHARE)<1e-9,
+      'the top-level recursive cut must be exactly phi-derived');
     const shifted=goldenRegions(width,height,.51);
     assert.notDeepEqual(shifted.map(r=>r.voice),cells.map(r=>r.voice),
       'golden-angle phrase rotation must reassign voice territories');
