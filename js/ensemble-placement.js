@@ -76,7 +76,9 @@ function prepareEqualVoice(scene) {
 }
 
 export function prepareEnsembleScene(scene) {
-  if (scene.ensembleRole === 'equal' && scene.sharedAnchor !== false) return prepareEqualVoice(scene);
+  if (scene.ensembleRole === 'equal' && scene.sharedAnchor === false)
+    return prepareSceneGeometry({ ...scene, markHierarchy: false });
+  if (scene.ensembleRole === 'equal') return prepareEqualVoice(scene);
   if (!scene.ensembleRole || scene.sharedAnchor === false) return prepareSceneGeometry(scene);
   const prepared = prepareSceneGeometry({ ...scene, markHierarchy: false });
 
