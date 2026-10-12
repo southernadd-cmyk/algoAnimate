@@ -49,16 +49,14 @@ export function interlockRenderer(A, settings) {
     }
     return makeR.call(this, seed);
   });
-  const point = (i, count) => protectFocalAnchor(
-    goldenLanePoint(A.W, A.H, i, count, lane, lanes, phase), A.W, A.H,
-    settings.ensembleRole || 'support');
+  const point = (i, count) => goldenLanePoint(A.W, A.H, i, count, lane, lanes, phase);
   let focal = 0;
   const phiPoint = A.phiPoint;
   replace('phiPoint', function (s, random) {
     const native = phiPoint.call(this, s, random), anchor = point(focal++ % Math.max(1, s.elements), s.elements);
     const pull = s.phiStrength / 100;
     const blended = { x: native.x + (anchor.x - native.x) * pull, y: native.y + (anchor.y - native.y) * pull, slot: anchor.slot };
-    return settings.ensembleRole === 'support' ? protectFocalAnchor(blended, A.W, A.H, 'support') : blended;
+    return blended;
   });
   replace('goldenCanvasPoint', function (i, count) { return point(i, count); });
   const distributed = A.distributedPhiPoints;
