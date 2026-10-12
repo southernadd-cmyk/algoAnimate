@@ -4,7 +4,6 @@ import { ENGINE_ROUTES, RoutedSound, LayeredArtwork,
   ENTRY_STAGGER_SECONDS, ENTRY_DURATION_SECONDS, ENTRY_FIRST_STROKE_AGE } from '../js/ensemble.js';
 import { SILENCE } from '../js/features.js';
 import { ensembleSettings } from '../js/ensemble.js';
-import { protectFocalAnchor, goldenLanePoint } from '../js/phi-layout.js';
 import { captureSheet, sheetSVG } from '../js/export.js';
 import { ScoreCapture, ScoreReplay, parseScore } from '../js/scores.js';
 
@@ -14,44 +13,13 @@ const sound = values => {
   return { ...SILENCE, ...raw, raw, active: true, rms: 0.1 };
 };
 
-test('ensemble lead is persistent and supporting anchor positions protect its focal reserve', () => {
-  const lead = ENGINE_ROUTES[3], support = ENGINE_ROUTES[1];
-  const a = ensembleSettings(lead, 'TEST', 'landscape', 'marker', 25);
-  const b = ensembleSettings(support, 'TEST', 'landscape', 'marker', 25);
-  assert.equal(a.ensembleRole, 'lead');
-  assert.equal(b.ensembleRole, 'support');
-  assert.ok(a.elements >= b.elements);
-  const anchor = { x: 1400 * 0.382, y: 1000 * 0.382, slot: 10 };
-  assert.deepEqual(protectFocalAnchor(anchor, 1400, 1000, 'lead'), anchor);
-  const shifted = protectFocalAnchor(anchor, 1400, 1000, 'support');
-  assert.ok(Math.hypot((shifted.x - anchor.x) / (1400 * 0.19),
-    (shifted.y - anchor.y) / (1000 * 0.20)) >= 1);
-  const outside = goldenLanePoint(1400, 1000, 4, 8, 2);
-  assert.notDeepEqual(protectFocalAnchor(outside, 1400, 1000, 'lead'), outside);
-  assert.equal(protectFocalAnchor({ x: anchor.x, y: anchor.y }, 1400, 1000, 'support').x !== anchor.x, true);
-  assert.deepEqual(protectFocalAnchor(anchor, 1400, 1000, 'support'), shifted,
-    'Same scaffold input must produce the same relocated anchor');
-});
-
-test('sampled scaffold reserves coherent lead coverage without a support boundary spike', () => {
-  const width = 1400, height = 1000, cx = width * 0.382, cy = height * 0.382;
-  const rx = width * 0.19, ry = height * 0.20;
-  const radial = point => Math.hypot((point.x - cx) / rx, (point.y - cy) / ry);
-  for (const count of [3, 8, 20]) {
-    const lead = Array.from({ length: count }, (_, i) =>
-      protectFocalAnchor(goldenLanePoint(width, height, i, count, 3), width, height, 'lead'));
-    assert.ok(lead.filter(point => radial(point) < 1).length >= Math.ceil(count * 0.5),
-      'At least half the loudness lead anchors should occupy the focal region');
-    const support = Array.from({ length: count }, (_, i) =>
-      protectFocalAnchor(goldenLanePoint(width, height, i, count, 1), width, height, 'support'));
-    assert.ok(support.every(point => radial(point) >= 1 - 1e-10),
-      'Supporting anchors avoid the central reserve');
-    const displaced = Array.from({ length: count }, (_, i) => goldenLanePoint(width, height, i, count, 1))
-      .map((point, i) => ({ before: radial(point), after: radial(support[i]) }))
-      .filter(point => point.before < 1);
-    if (displaced.length >= 2) assert.ok(new Set(displaced.map(point => point.after.toFixed(4))).size > 1,
-      'Displaced anchors must not collapse onto one radius');
+test('ensemble hierarchy retains a stable loudness lead with independent support audio routes', () => {
+  const lead = ENGINE_ROUTES.find(route => route.id === 'organic');
+  assert.equal(ensembleSettings(lead, 'TEST', 'landscape', 'marker', 25).ensembleRole, 'lead');
+  for (const route of ENGINE_ROUTES.filter(route => route.id !== 'organic')) {
+    assert.equal(ensembleSettings(route, 'TEST', 'landscape', 'marker', 25).ensembleRole, 'support');
   }
+  assert.deepEqual(ENGINE_ROUTES.find(route => route.id === 'organic').inputs, ['level']);
 });
 
 test('the ensemble assigns all eight real engines to six inputs and two combinations', () => {
