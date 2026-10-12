@@ -67,12 +67,12 @@ export function profileShift(previous, current, inputs, threshold = EARLY_REFRES
 }
 export function ensembleSettings(route, seed, orientation, palette, density = 25, style = null, profile = null, phase = 0) {
   const amount = clamp(density / 100);
-  // Growth remains the stable focal voice, but the other engines must have
-  // enough visual weight to join its gestures rather than just decorate them.
-  const ensembleRole = route.id === LEAD_ROUTE_ID ? 'lead' : 'support';
+  // Eight independent voices, none privileged: their visible territories are
+  // assigned by the shared recursive golden layout on the next phrase.
+  const ensembleRole = 'equal';
   // Keep native vector counts bounded for long score captures. Interaction
   // comes from placement, retention and shared ink rather than extra paths.
-  const roleBudget = ensembleRole === 'lead' ? 1 : 0.72;
+  const roleBudget = 0.86;
   const owns = key => route.inputs.includes(key);
   // Derive route energy from assigned inputs rather than trusting a caller's
   // global level field. This also protects direct composition-builder calls.
@@ -88,10 +88,9 @@ export function ensembleSettings(route, seed, orientation, palette, density = 25
     // subjects and less internal detail, rather than eight sparse solo posters.
     elements: Math.max(3, Math.round((3 + 25 * amount ** 1.5 * (0.55 + 0.9 * energy)) * roleBudget)), density: 4 + 96 * amount,
     complexity: 12 + 34 * amount + 18 * onsets, recursion: Math.round(1 + 2 * amount),
-    negativeSpace: Math.min(98, 92 - 48 * amount * (0.6 + 0.8 * energy) + (ensembleRole === 'lead' ? -7 : 5)), nesting: 6 + 42 * amount + 34 * bass,
+    negativeSpace: Math.min(98, 92 - 48 * amount * (0.6 + 0.8 * energy)), nesting: 6 + 42 * amount + 34 * bass,
     overlap: 8 + 47 * amount,
-    inkMemory: ensembleRole === 'lead' ? .42 + .45 * amount + .25 * energy
-      : (.22 + .58 * amount) * (.70 + .80 * energy),
+    inkMemory: (.24 + .58 * amount) * (.74 + .75 * energy),
     curveBias: brightness === null || !profile ? 80 : 92 - 84 * brightness,
     shapeAmount: profile && owns('flux') ? 24 + 72 * onsets : DEFAULT_SETTINGS.shapeAmount,
     rotation: profile && owns('flux') ? 24 + 72 * onsets : DEFAULT_SETTINGS.rotation,
@@ -101,7 +100,7 @@ export function ensembleSettings(route, seed, orientation, palette, density = 25
     ensembleRole,
     sharedAnchor: true,
     audioControls,
-    // Supporting frames get a bounded mark budget. Expressive voices unfold
+    // All eight voices get the same bounded mark budget. Expressive voices unfold
     // in longer phrases; each still reads only its own assigned sound inputs.
     markHierarchy: true, rectangleBudget: Math.round(2 + 4 * amount),
     rectangles: route.id === 'rects' || route.id === 'geometric',
@@ -143,7 +142,8 @@ export class LayeredArtwork {
   syncFocal(dt = 0) {
     const lead = this.leadVoice;
     const source = lead.art.activeLayer?.scene || lead.art.current;
-    const active = this.enabled(lead) && !lead.art.blank && Boolean(source);
+    const active = this.enabled(lead) && !lead.art.blank && Boolean(source)
+      && source.ensembleRole !== 'equal';
     if (!active) {
       this.focalRegion = this.effectiveFocal = this.focalSource = this.focalTransition = null;
       return;
@@ -271,7 +271,7 @@ export class LayeredArtwork {
           focal: voice.route.id === LEAD_ROUTE_ID ? null : this.effectiveFocal,
           initialInkAge: entering && canDraw ? ENTRY_FIRST_STROKE_AGE : 0 });
     }
-    // Apply a mid-frame lead handoff next frame so scores capture what was actually painted.
+    // New equal-voice sheets have no lead fading. Old score geometry remains replayable.
     if (this.entrySeconds >= ENTRY_DURATION_SECONDS) this.entryFinished = true;
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
   }
