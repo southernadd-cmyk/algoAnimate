@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ENGINE_ROUTES, RoutedSound, ensembleSettings, profileShift,
+import { ENGINE_ROUTES, LEAD_ROUTE_ID, RoutedSound, ensembleSettings, profileShift,
   EARLY_REFRESH_PROFILE_DELTA, EARLY_REFRESH_COOLDOWN_SECONDS } from '../js/ensemble.js';
 import { StyleDeck } from '../js/styles.js';
 import { SILENCE } from '../js/features.js';
@@ -192,10 +192,12 @@ test('all native engines render finite interlocked geometry in both orientations
         paths:render(route,orientation,profile(.5),'FOCAL-'+i),
         width:A.W,height:A.H,markHierarchy:true,mode:route.id
       }));
-      const lead=scenes[3], focal=focalFromScene(lead);
+      const leadIndex = ENGINE_ROUTES.findIndex(route => route.id === LEAD_ROUTE_ID);
+      assert.ok(leadIndex >= 0, 'Configured lead must be an engine route');
+      const lead=scenes[leadIndex], focal=focalFromScene(lead);
       dominant+=focalInk(lead,focal);
       scenes.forEach((scene,j) => {
-        if (j===3) return;
+        if (j===leadIndex) return;
         originalSupports+=focalInk(scene,focal);
         softenedSupports+=focalInk(softenSupportScene(scene,focal),focal);
       });

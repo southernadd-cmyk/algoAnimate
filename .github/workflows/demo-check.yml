@@ -24,6 +24,8 @@ jobs:
       - name: Ensure media inspection tools
         run: command -v ffprobe || (sudo apt-get update && sudo apt-get install -y ffmpeg)
       - name: Click-to-play, rotation, recording, mobile and cleanup
+        env:
+          ALGOANIMATE_DENSE_TAKE: '1'
         run: npm run test:demo
       - uses: actions/upload-artifact@v4
         if: always()

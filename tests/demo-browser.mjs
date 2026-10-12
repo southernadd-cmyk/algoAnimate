@@ -4,6 +4,8 @@ import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { resolve, extname } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { chromium } from 'playwright';
+import { parseScore, ScoreReplay, MAX_SCORE_BYTES } from '../js/scores.js';
+import { sheetSVG } from '../js/export.js';
 
 const root = resolve('.'), results = resolve('test-results/demo');
 await mkdir(results, { recursive: true });
@@ -56,6 +58,10 @@ const musicReady = title => page.waitForFunction(title => {
   return d.demo?.title === title && !d.demo.paused && d.features.active && d.drawing.inkLength > 0
     && document.getElementById('playDemo').getAttribute('aria-busy') === 'false';
 }, title, { timeout: 15000 });
+async function resumeDemo() {
+  const title = await page.locator('#demoTrackLink').textContent();
+  await page.click('#playDemo'); await musicReady(title);
+}
 try {
   await page.goto(`http://127.0.0.1:${server.address().port}/`);
   await page.waitForFunction(() => window.AlgoAnimate?.diagnostics().paths > 0);
@@ -184,6 +190,58 @@ try {
   assert.equal(await page.locator('#art').evaluate(canvas => canvas.toDataURL()), replayedSheet, 'A downloaded score replayed after import draws the same pixels');
   await page.click('#leaveReplay');
   await page.click('#playDemo'); await musicReady('Bubbles');
+  if (process.env.ALGOANIMATE_DENSE_TAKE === '1') {
+    await page.evaluate(() => {
+      for (const [id, value] of [['density', 100], ['evolution', 80]]) {
+        const control = document.getElementById(id); control.value = value;
+        control.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    });
+    await page.waitForFunction(() => !window.AlgoAnimate.diagnostics().building && !document.getElementById('record').disabled,
+      null, { timeout: 30000 });
+    const beforeDense = await state();
+    await page.click('#record');
+    await page.waitForFunction(() => window.AlgoAnimate.diagnostics().recording);
+    console.log('Dense recording started: real demo music, 100% density, normal three-minute auto-stop.');
+    await page.waitForFunction(() => !window.AlgoAnimate.diagnostics().recordingBusy,
+      null, { timeout: 205000, polling: 1000 });
+    const afterDense = await state();
+    const denseVideoDownload = page.waitForEvent('download'); await page.click('#download');
+    const denseVideoPath = resolve(results, 'dense-three-minute.webm');
+    await (await denseVideoDownload).saveAs(denseVideoPath);
+    const denseScoreDownload = page.waitForEvent('download'); await page.click('#saveScore');
+    const denseScorePath = resolve(results, 'dense-three-minute-score.json');
+    await (await denseScoreDownload).saveAs(denseScorePath);
+    const denseText = await readFile(denseScorePath, 'utf8'), denseScore = parseScore(denseText);
+    assert.ok(denseScore.duration >= 179000, 'The dense score must reach the normal three-minute auto-stop');
+    assert.ok(Buffer.byteLength(denseText) < MAX_SCORE_BYTES * .8, 'Lossless vectors remain below the score cutoff');
+    assert.ok(denseScore.scenes.length <= afterDense.compositions - beforeDense.compositions + 24,
+      'Restyling must not add extra scene records');
+    let focalChanges = 0;
+    for (let i = 1; i < denseScore.frames.length; i++) {
+      if (JSON.stringify(denseScore.frames[i][5]) !== JSON.stringify(denseScore.frames[i - 1][5])) focalChanges++;
+    }
+    assert.ok(focalChanges > 30, 'The dense take must exercise moving focal transitions');
+    const probe = new ScoreReplay(denseScore); probe.seek(denseScore.duration);
+    await page.click('#replayScore');
+    await page.locator('#scoreSeek').evaluate(el => { el.value = el.max; el.dispatchEvent(new Event('input', { bubbles: true })); });
+    await page.waitForFunction(() => window.AlgoAnimate.diagnostics().replay?.paused);
+    await page.selectOption('#exportFormat', 'svg');
+    const denseSVGDownload = page.waitForEvent('download'); await page.click('#snapshot');
+    const denseSVGPath = resolve(results, 'dense-final-frame.svg'); await (await denseSVGDownload).saveAs(denseSVGPath);
+    assert.equal(await readFile(denseSVGPath, 'utf8'), sheetSVG(probe.sheet()), 'Dense score replays the exact final vector frame');
+    const denseMedia = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-show_format', '-show_streams', '-of', 'json', denseVideoPath]));
+    assert.ok(denseMedia.streams.some(stream => stream.codec_type === 'audio'));
+    assert.ok(denseMedia.streams.some(stream => stream.codec_type === 'video'));
+    const seconds = Number(denseMedia.format.duration);
+    assert.ok(seconds >= 179 && seconds <= 185, 'Video reaches the three-minute capture limit');
+    const report = { density: 100, videoSeconds: seconds, scoreMilliseconds: denseScore.duration,
+      scoreBytes: Buffer.byteLength(denseText), scenes: denseScore.scenes.length, frames: denseScore.frames.length,
+      focalChanges, newCompositions: afterDense.compositions - beforeDense.compositions, replay: 'exact SVG' };
+    await writeFile(resolve(results, 'dense-recording-report.json'), JSON.stringify(report, null, 2));
+    console.log('PASS: dense three-minute music recording, full score and exact replay.', report);
+    await page.click('#leaveReplay'); await resumeDemo();
+  }
   await page.screenshot({ path: resolve(results, 'desktop.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
@@ -192,7 +250,7 @@ try {
   await page.click('#stopAudio');
   assert.equal((await state()).source, null);
   assert.equal(await page.locator('#demoPlayer').getAttribute('src'), null);
-  await page.click('#playDemo'); await musicReady('Bubbles');
+  await resumeDemo();
   assert.deepEqual(errors, []);
   assert.ok(new Set(musicRequests).size === 3, 'All three bundled recordings are playable');
   console.log('PASS: solo/mute, overlay, performance, shortcuts, wake lock, vector/3x export, score pixel determinism, click-to-play, pause/resume, three tracks, real automatic advance, wrap, export sound, mobile and reconnect. Export RMS:', rms.toFixed(4));

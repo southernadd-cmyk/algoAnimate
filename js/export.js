@@ -1,8 +1,10 @@
 import { clamp } from './features.js';
 import { inkWindow, strokeWindow } from './ink.js';
+import { supportInfluences } from './focal-hierarchy.js';
 
-export function layerStrokes(layer, gentle = false, opacity = 0.72, inkMemory = layer.scene.inkMemory ?? 0.7) {
+export function layerStrokes(layer, gentle = false, opacity = 0.72, inkMemory = layer.scene.inkMemory ?? 0.7, focal = null) {
   const scene = layer.scene, memory = inkMemory * (gentle ? 8 / 7 : 1);
+  const influences = supportInfluences(scene, focal);
   const paths = [];
   scene.paths.forEach((entry, index) => {
     const timing = scene.schedule[index];
@@ -12,8 +14,9 @@ export function layerStrokes(layer, gentle = false, opacity = 0.72, inkMemory = 
     if (to <= from || !entry.geometry.length) return;
     const d = from === 0 && to === 1 ? entry.d
       : strokeWindow(entry.geometry, from, to).map(command => command.join(' ')).join(' ');
-    paths.push({ d, stroke: entry.stroke, width: entry.width * (layer.pressure[index] ?? 1),
-      opacity: clamp(entry.opacity) * opacity, lineCap: entry.lineCap || 'round',
+    const influence = influences?.[index] || 0;
+    paths.push({ d, stroke: entry.stroke, width: entry.width * (1 - .22 * influence) * (layer.pressure[index] ?? 1),
+      opacity: clamp(entry.opacity * (1 - .55 * influence)) * opacity, lineCap: entry.lineCap || 'round',
       blend: entry.blend || 'source-over', transform: entry.transform,
       dash: entry.dash || [], dashOffset: (entry.dashOffset || 0) + from * entry.geometry.length });
   });
@@ -25,7 +28,8 @@ export function captureSheet(artwork, gentle = false) {
   if (!scene) throw new Error('Wait for the paper to be ready.');
   return { width: scene.width, height: scene.height, paper: scene.paper,
     paperMarks: scene.paperMarks, paths: artwork.voices.filter(voice => artwork.enabled(voice))
-      .flatMap(voice => voice.art.layers.flatMap(layer => layerStrokes(layer, gentle, 0.72, voice.art.current.inkMemory ?? 0.7))) };
+      .flatMap(voice => voice.art.layers.flatMap(layer => layerStrokes(layer, gentle, 0.72, voice.art.current.inkMemory ?? 0.7,
+        voice === artwork.leadVoice ? null : artwork.effectiveFocal))) };
 }
 
 export function paintSheet(context, sheet, scale = 1) {

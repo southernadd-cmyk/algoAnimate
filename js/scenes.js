@@ -2,6 +2,7 @@ import { clamp } from './features.js';
 import { prepareSceneGeometry, strokeWindow, inkWindow } from './ink.js';
 import { renderComposition } from './composition.js';
 import { ALGOART_RENDERER_VERSION } from './renderer-version.js';
+import { supportInfluences } from './focal-hierarchy.js';
 export { pathBounds } from './ink.js';
 
 export const DEFAULT_SETTINGS = Object.freeze({
@@ -127,7 +128,7 @@ export class AnimatedArtwork {
     this.layers = this.layers.slice(-3); this.turns++;
   }
   draw(features, dt, response = 0.6, gentle = false, cycle = 4, flowing = features.active,
-    { paper = true, opacity = 1, initialInkAge = 0 } = {}) {
+    { paper = true, opacity = 1, initialInkAge = 0, focal = null } = {}) {
     if (!this.current) return;
     this.flowing = flowing;
     const memory = (this.current.inkMemory ?? 0.7) * (gentle ? 8 / 7 : 1);
@@ -174,12 +175,13 @@ export class AnimatedArtwork {
     }
     ctx.globalAlpha = 1;
     this.stats = { progress: this.activeLayer?.age || 0, penTips: 0, visiblePaths: 0, inkLength: 0 };
-    if (this.layers.length) for (const layer of this.layers) this.drawLayer(layer, features, response, gentle, memory, false, opacity);
-    else if (!this.blank) this.drawLayer(this.layer(this.current, 0, true), features, 0, gentle, memory, true, opacity);
+    if (this.layers.length) for (const layer of this.layers) this.drawLayer(layer, features, response, gentle, memory, false, opacity, focal);
+    else if (!this.blank) this.drawLayer(this.layer(this.current, 0, true), features, 0, gentle, memory, true, opacity, focal);
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
   }
-  drawLayer(layer, features, response, gentle, memory, still = false, opacity = 1) {
+  drawLayer(layer, features, response, gentle, memory, still = false, opacity = 1, focal = null) {
     const ctx = this.context, scene = layer.scene;
+    const influences = supportInfluences(scene, focal);
     for (let i = 0; i < scene.paths.length; i++) {
       const entry = scene.paths[i], timing = scene.schedule[i];
       const { from, to } = still ? { from: 0, to: 1 } : layer.preview
@@ -194,8 +196,9 @@ export class AnimatedArtwork {
           + features.bass * large * 0.24 + features.treble * (1 - large) * 0.12);
       }
       ctx.strokeStyle = entry.stroke;
-      ctx.lineWidth = entry.width * layer.pressure[i];
-      ctx.globalAlpha = clamp(entry.opacity) * opacity;
+      const influence = influences?.[i] || 0;
+      ctx.lineWidth = entry.width * (1 - .22 * influence) * layer.pressure[i];
+      ctx.globalAlpha = clamp(entry.opacity * (1 - .55 * influence)) * opacity;
       ctx.lineCap = entry.lineCap || 'round'; ctx.lineJoin = 'round';
       ctx.globalCompositeOperation = entry.blend || 'source-over';
       ctx.setLineDash(entry.dash || []);

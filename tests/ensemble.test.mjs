@@ -1,11 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ENGINE_ROUTES, RoutedSound, LayeredArtwork,
-  ENTRY_STAGGER_SECONDS, ENTRY_DURATION_SECONDS, ENTRY_FIRST_STROKE_AGE } from '../js/ensemble.js';
+  LEAD_ROUTE_ID, ENTRY_STAGGER_SECONDS, ENTRY_DURATION_SECONDS, ENTRY_FIRST_STROKE_AGE } from '../js/ensemble.js';
 import { SILENCE } from '../js/features.js';
 import { ensembleSettings } from '../js/ensemble.js';
 import { captureSheet, sheetSVG } from '../js/export.js';
 import { ScoreCapture, ScoreReplay, parseScore } from '../js/scores.js';
+import { packVectors, unpackVectors } from '../js/score-vectors.js';
+import { softenSupportScene } from '../js/focal-hierarchy.js';
 
 const keys = ['level', 'bass', 'mid', 'treble', 'centroid', 'flux'];
 const sound = values => {
@@ -20,6 +22,36 @@ test('ensemble hierarchy retains a stable loudness lead with independent support
     assert.equal(ensembleSettings(route, 'TEST', 'landscape', 'marker', 25).ensembleRole, 'support');
   }
   assert.deepEqual(ENGINE_ROUTES.find(route => route.id === 'organic').inputs, ['level']);
+});
+
+test('legacy version-1 scores preserve their already-faded vectors and reject malformed new focal/vector data', () => {
+  const { art } = fixture();
+  for (let i = 0; i < 15; i++) { art.updateSignals(full, 1 / 30, true); art.draw(1 / 30, .6, false, 4); }
+  const capture = new ScoreCapture(0); capture.capture(0, art, full, false);
+  const current = capture.finish(), legacy = JSON.parse(JSON.stringify(current));
+  legacy.version = 1; delete legacy.hierarchyLead;
+  legacy.frames = legacy.frames.map(frame => frame.slice(0, 5));
+  legacy.layers.forEach(layer => { if (!Array.isArray(layer.pressure)) layer.pressure = unpackVectors({ vectors: layer.pressure }); });
+  legacy.scenes = legacy.scenes.map(record => {
+    const native = unpackVectors(record);
+    const frozen = record.mode === LEAD_ROUTE_ID ? native : softenSupportScene(native, art.effectiveFocal);
+    return { seed: record.seed, mode: record.mode, inkMemory: record.inkMemory,
+      schedule: frozen.schedule, paths: frozen.paths };
+  });
+  const replay = new ScoreReplay(parseScore(JSON.stringify(legacy)));
+  assert.equal(sheetSVG(replay.sheet()), sheetSVG(captureSheet(art)), 'V1 faded vectors must not be faded again');
+  for (const change of [
+    score => { score.hierarchyLead = 8; },
+    score => { score.frames[0][5][2] = 0; },
+    score => { score.frames[0][5][0] = -1; },
+    score => { score.scenes[0].vectors.bytes = 0; },
+    score => { score.scenes[0].vectors.bytes -= 1; },
+    score => { score.scenes[0].vectors.data = 'not base64'; },
+    score => { score.scenes[0].pathCount += 1; }
+  ]) {
+    const invalid = JSON.parse(JSON.stringify(current)); change(invalid);
+    assert.throws(() => parseScore(JSON.stringify(invalid)), /supported AlgoAnimate score/);
+  }
 });
 
 test('the ensemble assigns all eight real engines to six inputs and two combinations', () => {
@@ -221,6 +253,34 @@ test('solo/mute isolates visible ink, holds excluded clocks and resumes them wit
   assert.ok(art.voices[1].art.activeLayer.age > held[0]);
 });
 
+test('scores replay every frame through moving, interrupted and muted focal transitions without duplicate support geometry', () => {
+  const { art } = fixture(), capture = new ScoreCapture(0), expected = [];
+  const lead = art.leadVoice;
+  const moveLead = x => art.setVoiceScene(lead, { seed: 'MOVING-' + x, mode: LEAD_ROUTE_ID,
+    width: 1000, height: 700, paper: '#fff', paperMarks: [],
+    paths: [{ d: `M ${x} 290 C ${x + 20} 310 ${x + 70} 390 ${x + 90} 430`,
+      stroke: '#000', width: 3, opacity: .8 }] }, false, true);
+  for (let frame = 0; frame < 120; frame++) {
+    if (frame === 20) moveLead(750);
+    if (frame === 28) moveLead(250);
+    if (frame === 60) art.toggleMute(LEAD_ROUTE_ID);
+    if (frame === 72) art.toggleMute(LEAD_ROUTE_ID);
+    art.updateSignals(full, 1 / 30, true); art.draw(1 / 30, .7, false, 4);
+    capture.capture(frame * 1000 / 30, art, full, false);
+    expected.push(sheetSVG(captureSheet(art)));
+  }
+  const score = capture.finish(), replay = new ScoreReplay(parseScore(JSON.stringify(score)));
+  assert.equal(score.scenes.filter(scene => scene.mode !== LEAD_ROUTE_ID).length, ENGINE_ROUTES.length - 1,
+    'Only actual new compositions receive geometry records');
+  assert.ok(score.frames.some(frame => frame[5] === null), 'Mute records full-strength support ink');
+  assert.ok(new Set(score.frames.filter(frame => frame[5]).map(frame => JSON.stringify(frame[5]))).size > 30,
+    'The test includes actual per-frame focal easing');
+  for (let frame = 0; frame < score.frames.length; frame++) {
+    replay.seek(score.frames[frame][0]);
+    assert.equal(sheetSVG(replay.sheet()), expected[frame], 'Moving focal frame ' + frame);
+  }
+});
+
 test('scores reproduce every visible vector frame, including future pressure, mixing, clear and density changes', () => {
   const { art } = fixture(), capture = new ScoreCapture(0), expected = [];
   let time = 0;
@@ -246,9 +306,10 @@ test('scores reproduce every visible vector frame, including future pressure, mi
     const invalid = JSON.parse(text); invalid.renderer = invalidRenderer;
     assert.throws(() => parseScore(JSON.stringify(invalid)));
   }
-  const unsupportedFormat = JSON.parse(text); unsupportedFormat.version = 2;
+  const unsupportedFormat = JSON.parse(text); unsupportedFormat.version = 3;
   assert.throws(() => parseScore(JSON.stringify(unsupportedFormat)));
-  const malicious = JSON.parse(text); malicious.scenes[0].paths[0].stroke = 'url(https://example.com)';
+  const malicious = JSON.parse(text), vectors = unpackVectors(malicious.scenes[0]);
+  vectors.paths[0].stroke = 'url(https://example.com)'; malicious.scenes[0].vectors = packVectors(vectors);
   assert.throws(() => parseScore(JSON.stringify(malicious)));
   const badRef = JSON.parse(text); badRef.frames[0][2] = 9999;
   assert.throws(() => parseScore(JSON.stringify(badRef)));

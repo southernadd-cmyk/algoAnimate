@@ -2,6 +2,16 @@
 
 This document preserves the detailed v0.14 README describing the original implementation and testing approach. See [README.md](README.md) for the concise user guide.
 
+## v0.18 focal transitions and scores
+
+The lead is selected by `LEAD_ROUTE_ID`. Native lead vectors set a clamped, hysteretic target; the displayed focal centre eases to that target over one second of active drawing. Retargeting starts from the position currently on the page, and silence freezes the transition. Muting the lead or soloing a support removes the fade immediately.
+
+Support scenes and ink layers retain their identities. Cached transformed path samples and reusable influence buffers apply opacity/width at drawing time, with no new Path2D or geometry records per transition frame. A stationary focal point reuses its influence calculations. Live export and score replay share this same calculation.
+
+Score format 2 stores the actual focal ellipse per frame and the recorded lead index. Scene vectors and retired pressure arrays are losslessly compressed with the bundled MIT-licensed fflate codec. Geometry is recorded once per actual composition; pressure remains mutable only until its ink layer leaves the live artwork. Replay caches only visible scene geometry and pressure records. Version-1 scores keep their original five-field frames and baked-in fades, and remain readable. Import caps both packed file size and expanded vector data.
+
+The native-vector regression simulates a three-minute, 30 FPS take at 100% density, changing all eight genuine engine compositions every 2.5 seconds. It requires capture to reach 180 seconds under the existing 16 MiB early cutoff, with exact vector replay at sampled transition frames. The PR demo browser check additionally records real bundled music for the full three-minute auto-stop at 100% density and checks video duration/audio, score duration/size, scene counts and exact SVG replay.
+
 # ALGO / ANIMATE — v0.14
 
 **Sound, in living ink.** A browser-only audio experiment using the golden ratio
