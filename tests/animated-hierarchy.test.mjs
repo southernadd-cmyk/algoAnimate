@@ -104,6 +104,21 @@ test('Growth joins the other equal voices and responds to audio and phrase chang
   }
 });
 
+test('strong onsets rotate golden territory assignments with a silence-safe cooldown', () => {
+  const art=new LayeredArtwork({width:1400,height:1000,getContext:()=>context});
+  const change={...SILENCE,active:true,beat:true,flux:.8,raw:{...SILENCE.raw,flux:.8}};
+  art.updateSignals(change,.1,true);
+  assert.equal(art.regionAccentTurns,1);
+  art.updateSignals(change,1,true);
+  assert.equal(art.regionAccentTurns,1,'one sustained sound must not rearrange the sheet repeatedly');
+  art.updateSignals(SILENCE,100,false);
+  assert.equal(art.regionAccentTurns,1,'silence does not advance region assignments');
+  art.updateSignals(change,8,true);
+  assert.equal(art.regionAccentTurns,2,'a later accented phrase may change the territories');
+  art.resetSound();
+  assert.equal(art.regionAccentTurns,0,'new audio source starts a fresh phrase arrangement');
+});
+
 test('active eight-voice animation has no central lead and stays on a shared sheet', () => {
   const render=nativeRenderer();
   for(const orientation of ['landscape','portrait']) {
