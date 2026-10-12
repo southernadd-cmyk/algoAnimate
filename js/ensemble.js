@@ -66,7 +66,7 @@ export function ensembleSettings(route, seed, orientation, palette, density = 25
   const amount = clamp(density / 100);
   // Stable hierarchy: no loudest-route leader election or audio-triggered swaps.
   // Listening remains independent, but supporting voices use smaller budgets.
-  const ensembleRole = route.id === 'field' ? 'lead' : 'support';
+  const ensembleRole = route.id === 'organic' ? 'lead' : 'support';
   const roleBudget = ensembleRole === 'lead' ? 1 : 0.72;
   const owns = key => route.inputs.includes(key);
   // Derive route energy from assigned inputs rather than trusting a caller's
