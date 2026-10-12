@@ -5,7 +5,9 @@ import { markerGeometry } from './ink.js';
 const sampleCache = new WeakMap();
 const influenceCache = new WeakMap();
 export const FOCAL_TRANSITION_SECONDS = 1;
-export const SUPPORT_OPACITY_REDUCTION = .75;
+// Gentle separation rather than hiding collaborating strokes under Growth.
+// Scores record this opacity reduction, preserving old captures on playback.
+export const SUPPORT_OPACITY_REDUCTION = .42;
 export const SUPPORT_WIDTH_REDUCTION = .22;
 
 function samples(path) {

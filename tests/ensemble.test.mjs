@@ -15,6 +15,16 @@ const sound = values => {
   return { ...SILENCE, ...raw, raw, active: true, rms: 0.1 };
 };
 
+test('ensemble companions retain enough ink and gesture budget to participate in the focal drawing', () => {
+  const lead = ensembleSettings(ENGINE_ROUTES.find(route => route.id === 'organic'), 'TEST', 'landscape', 'marker', 25);
+  for (const route of ENGINE_ROUTES.filter(route => route.id !== 'organic')) {
+    const partner = ensembleSettings(route, 'TEST', 'landscape', 'marker', 25);
+    assert.ok(partner.elements >= Math.floor(lead.elements * .70), route.id + ' must have useful marks');
+    assert.ok(partner.inkMemory >= .30, route.id + ' ink must last long enough to interact');
+    assert.ok(partner.inkMemory < lead.inkMemory, route.id + ' should not replace the focal voice');
+  }
+});
+
 test('ensemble hierarchy retains a stable loudness lead with independent support audio routes', () => {
   const lead = ENGINE_ROUTES.find(route => route.id === 'organic');
   assert.equal(ensembleSettings(lead, 'TEST', 'landscape', 'marker', 25).ensembleRole, 'lead');
@@ -121,7 +131,7 @@ test('old version-2 scores retain their original fade and new scores save the st
   for(let i=0;i<20;i++){art.updateSignals(full,1/30,true);art.draw(1/30,.6,false,4);}
   const capture=new ScoreCapture(0);capture.capture(0,art,full,false);
   const score=capture.finish();
-  assert.equal(score.supportOpacityReduction,.75);
+  assert.equal(score.supportOpacityReduction,.42);
   assert.equal(sheetSVG(new ScoreReplay(parseScore(JSON.stringify(score))).sheet()),sheetSVG(captureSheet(art)));
   score.version=2; delete score.supportOpacityReduction;
   const old = new ScoreReplay(parseScore(JSON.stringify(score))).sheet();

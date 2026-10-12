@@ -31,7 +31,27 @@ test('golden placement composes transforms, stays on paper, and accents a gestur
   assert.equal(free.goldenFocal,undefined);
 });
 
-test('native animated ensemble keeps a golden lead through partial strokes and scene handoffs', () => {
+test('supporting engine positions bridge into the focal area without collapsing onto Growth', () => {
+  for (const [width, height] of [[1400, 1000], [1000, 1400]]) {
+    const anchor = ensembleAnchor(width, height);
+    const scene = { width, height, ensembleRole:'support', markHierarchy:true,
+      paths:[{ d:'M 200 200 C 250 330 470 160 550 400',
+        width:3, opacity:.7, role:'gesture', motif:1 }] };
+    const outer = prepareEnsembleScene({...scene,mode:'field',interlock:{lane:0,lanes:8}});
+    const connector = prepareEnsembleScene({...scene,mode:'network',interlock:{lane:0,lanes:8}});
+    const distance = ({x,y}) => Math.hypot((x-anchor.x)/width,(y-anchor.y)/height);
+    assert.ok(distance(connector.placement.target) < distance(outer.placement.target));
+    assert.ok(distance(outer.placement.target) > 0);
+    assert.ok(connector.placement.scale > outer.placement.scale);
+    for (const prepared of [outer,connector]) for (const path of prepared.paths)
+      for (const segment of path.geometry.segments) for (const point of segment.points) {
+        assert.ok(point.x >= width*.04-1e-5 && point.x <= width*.96+1e-5);
+        assert.ok(point.y >= height*.04-1e-5 && point.y <= height*.96+1e-5);
+      }
+  }
+});
+
+test('native animated ensemble shares ink with Growth through partial strokes and scene handoffs', () => {
   const render = nativeRenderer();
   for (const orientation of ['landscape','portrait']) {
     const ratios=[];
@@ -60,9 +80,9 @@ test('native animated ensemble keeps a golden lead through partial strokes and s
       }
     }
     const mean=ratios.reduce((a,b)=>a+b,0)/ratios.length;
-    const dominant=ratios.filter(x=>x>.6).length/ratios.length;
-    console.log(orientation,{mean,dominant});
-    assert.ok(mean>.6,orientation+' visible lead share: '+mean.toFixed(3));
-    assert.ok(dominant>.75,orientation+' lead holds >60% ink in at least 75% of animated samples: '+dominant.toFixed(3));
+    const collaborative=ratios.filter(x=>x>=.3&&x<=.8).length/ratios.length;
+    console.log(orientation,{mean,collaborative});
+    assert.ok(mean>.38&&mean<.8,orientation+' ensemble focal balance: '+mean.toFixed(3));
+    assert.ok(collaborative>.6,orientation+' lead and partners must share visible ink: '+collaborative.toFixed(3));
   }
 });

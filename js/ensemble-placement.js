@@ -16,8 +16,15 @@ export function prepareEnsembleScene(scene) {
   const lane = scene.interlock?.lane ?? 0;
   const high = 1 - GOLDEN_LOW;
   const targets = [[high, GOLDEN_LOW], [GOLDEN_LOW, high], [high, high]];
+  // Let the line-oriented and connective voices reach toward Growth's golden
+  // intersection. Other voices retain their own territories, but lean into
+  // the same conversation. Each voice keeps independent sound and ink timing.
+  const connector = ['network', 'scribble', 'spiral'].includes(scene.mode);
+  const bridge = connector ? .56 : .30;
+  const corner = targets[lane % 3];
   const target = scene.ensembleRole === 'lead' ? anchor : {
-    x: scene.width * targets[lane % 3][0], y: scene.height * targets[lane % 3][1]
+    x: scene.width * corner[0] * (1 - bridge) + anchor.x * bridge,
+    y: scene.height * corner[1] * (1 - bridge) + anchor.y * bridge
   };
   let motif, score = 0;
   if (scene.ensembleRole === 'lead') for (const path of prepared.paths) {
@@ -43,9 +50,9 @@ export function prepareEnsembleScene(scene) {
       if (dy > 0) scale = Math.min(scale, (scene.height * .96 - target.y) / dy);
     }
   });
-  // Supporting forms leave a margin around their own intersection instead of
-  // filling all available paper and crossing the lead with large accents.
-  if (scene.ensembleRole === 'support') scale *= high;
+  // Partners are large enough to exchange marks across the focal area, but
+  // are still fitted to the page before they are drawn.
+  if (scene.ensembleRole === 'support') scale *= connector ? .82 : .74;
   const paths = prepared.paths.map((path, index) => {
     // Bake the affine map into vector coordinates. This preserves curve shape
     // and nib width and gives live drawing, SVG and old score replay one geometry.
@@ -63,5 +70,5 @@ export function prepareEnsembleScene(scene) {
   });
   return prepareSceneGeometry({ ...scene, paths,
     goldenFocal: scene.ensembleRole === 'lead' ? anchor : null,
-    placement: { anchor, target: { x: target.x, y: target.y }, scale } });
+    placement: { anchor, target: { x: target.x, y: target.y }, scale, bridge: scene.ensembleRole === 'support' ? bridge : 0 } });
 }

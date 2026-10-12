@@ -67,10 +67,10 @@ export function profileShift(previous, current, inputs, threshold = EARLY_REFRES
 }
 export function ensembleSettings(route, seed, orientation, palette, density = 25, style = null, profile = null, phase = 0) {
   const amount = clamp(density / 100);
-  // Stable hierarchy: no loudest-route leader election or audio-triggered swaps.
-  // Listening remains independent, but supporting voices use smaller budgets.
+  // Growth remains the stable focal voice, but the other engines must have
+  // enough visual weight to join its gestures rather than just decorate them.
   const ensembleRole = route.id === LEAD_ROUTE_ID ? 'lead' : 'support';
-  const roleBudget = ensembleRole === 'lead' ? 1 : 0.72;
+  const roleBudget = ensembleRole === 'lead' ? 1 : 0.87;
   const owns = key => route.inputs.includes(key);
   // Derive route energy from assigned inputs rather than trusting a caller's
   // global level field. This also protects direct composition-builder calls.
@@ -86,10 +86,10 @@ export function ensembleSettings(route, seed, orientation, palette, density = 25
     // subjects and less internal detail, rather than eight sparse solo posters.
     elements: Math.max(3, Math.round((3 + 25 * amount ** 1.5 * (0.55 + 0.9 * energy)) * roleBudget)), density: 4 + 96 * amount,
     complexity: 12 + 34 * amount + 18 * onsets, recursion: Math.round(1 + 2 * amount),
-    negativeSpace: Math.min(98, 92 - 48 * amount * (0.6 + 0.8 * energy) + (ensembleRole === 'lead' ? -7 : 5)), nesting: 6 + 42 * amount + 34 * bass,
+    negativeSpace: Math.min(98, 92 - 48 * amount * (0.6 + 0.8 * energy) + (ensembleRole === 'lead' ? -7 : 1)), nesting: 6 + 42 * amount + 34 * bass,
     overlap: 8 + 47 * amount,
     inkMemory: ensembleRole === 'lead' ? .42 + .45 * amount + .25 * energy
-      : (0.12 + 0.58 * amount) * (0.55 + 0.9 * energy),
+      : (.22 + .58 * amount) * (.70 + .80 * energy),
     curveBias: brightness === null || !profile ? 80 : 92 - 84 * brightness,
     shapeAmount: profile && owns('flux') ? 24 + 72 * onsets : DEFAULT_SETTINGS.shapeAmount,
     rotation: profile && owns('flux') ? 24 + 72 * onsets : DEFAULT_SETTINGS.rotation,
