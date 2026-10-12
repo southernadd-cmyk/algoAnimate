@@ -1,6 +1,7 @@
 import { SILENCE, clamp } from './features.js';
 import { markerGeometry } from './ink.js';
 import { layerStrokes } from './export.js';
+import { ALGOART_RENDERER_VERSION } from './renderer-version.js';
 
 export const SCORE_FORMAT = 'algoanimate-score';
 export const SCORE_FORMAT_VERSION = 1;
@@ -27,7 +28,7 @@ export class ScoreCapture {
   constructor(started, source = '') {
     this.started = started; this.bytes = 0;
     this.sceneIds = new WeakMap(); this.layerIds = new WeakMap(); this.paperIds = new WeakMap();
-    this.data = { format: SCORE_FORMAT, version: SCORE_FORMAT_VERSION, renderer: 7, source,
+    this.data = { format: SCORE_FORMAT, version: SCORE_FORMAT_VERSION, renderer: ALGOART_RENDERER_VERSION, source,
       featureKeys: keys, scenes: [], layers: [], papers: [], frames: [], duration: 0 };
   }
   sceneId(scene) {
