@@ -1,6 +1,9 @@
 import { SoundGate, SoundSeed, SILENCE, clamp, hash } from './features.js';
 import { AnimatedArtwork, DEFAULT_SETTINGS } from './scenes.js';
 import { styleSettings } from './styles.js';
+import { focalFromScene, softenSupportScene, stabilizeFocal } from './focal-hierarchy.js';
+
+export const LEAD_ROUTE_ID = 'organic';
 
 // Six measured features, plus two combinations. A route never reads another
 // feature's history, clock or pressure. All eight share one audio analyser.
@@ -66,7 +69,7 @@ export function ensembleSettings(route, seed, orientation, palette, density = 25
   const amount = clamp(density / 100);
   // Stable hierarchy: no loudest-route leader election or audio-triggered swaps.
   // Listening remains independent, but supporting voices use smaller budgets.
-  const ensembleRole = route.id === 'organic' ? 'lead' : 'support';
+  const ensembleRole = route.id === LEAD_ROUTE_ID ? 'lead' : 'support';
   const roleBudget = ensembleRole === 'lead' ? 1 : 0.72;
   const owns = key => route.inputs.includes(key);
   // Derive route energy from assigned inputs rather than trusting a caller's
@@ -118,6 +121,9 @@ export class LayeredArtwork {
     this.entryNextSlot = 0;
     this.layoutTime = 0; // Seconds of audible performance; stops advancing in silence.
     this.solo = null;
+    this.focalRegion = null;
+    this.effectiveFocal = null;
+    this.focalSource = null;
     this.voices = ENGINE_ROUTES.map(route => ({ route, art: new AnimatedArtwork(canvas),
       muted: false,
       sound: new RoutedSound(route), flowing: false, building: false, generation: 0,
@@ -125,13 +131,51 @@ export class LayeredArtwork {
       entrySlot: null, lastSceneTime: -1 }));
   }
   enabled(voice) { return !voice.muted && (!this.solo || this.solo === voice.route.id); }
+  get leadVoice() { return this.voices.find(voice => voice.route.id === LEAD_ROUTE_ID); }
+  // Replace immutable vector scene and layer snapshots on focal changes. This
+  // preserves geometry, pen ages, pressure and exact score replay: ScoreCapture
+  // sees new scene/layer identities instead of silently changed old records.
+  restyleSupports(focal) {
+    for (const voice of this.voices) {
+      if (voice.route.id === LEAD_ROUTE_ID) continue;
+      const art = voice.art, cached = new Map();
+      const restyle = scene => {
+        if (!scene) return scene;
+        if (!cached.has(scene)) cached.set(scene, softenSupportScene(scene, focal));
+        return cached.get(scene);
+      };
+      art.current = restyle(art.current);
+      art.queued = restyle(art.queued);
+      art.layers = art.layers.map(layer => ({ ...layer, scene: restyle(layer.scene), pressure: layer.pressure.slice() }));
+    }
+  }
+  syncFocal() {
+    const lead = this.leadVoice;
+    const source = lead.art.activeLayer?.scene || lead.art.current;
+    const active = this.enabled(lead) && !lead.art.blank && Boolean(source);
+    if (active && source !== this.focalSource) {
+      this.focalRegion = stabilizeFocal(focalFromScene(source), this.focalRegion);
+      this.focalSource = source;
+    }
+    const next = active ? this.focalRegion : null;
+    if (next !== this.effectiveFocal) {
+      this.effectiveFocal = next;
+      this.restyleSupports(next);
+    }
+  }
+  setVoiceScene(voice, scene, immediate = false, startNow = false) {
+    voice.art.setScene(voice.route.id === LEAD_ROUTE_ID ? scene
+      : softenSupportScene(scene, this.effectiveFocal), immediate, startNow);
+  }
   toggleSolo(id) {
     this.solo = this.solo === id ? null : id;
     if (this.solo) this.voices.find(voice => voice.route.id === id).muted = false;
+    this.syncFocal();
   }
   toggleMute(id) {
     const voice = this.voices.find(voice => voice.route.id === id);
     if (voice) voice.muted = !voice.muted;
+    this.syncFocal();
   }
   get current() { return this.voices[0].art.current; }
   get ready() { return this.voices.every(voice => voice.art.current); }
@@ -160,6 +204,9 @@ export class LayeredArtwork {
     }
   }
   clearInk() {
+    this.focalRegion = null;
+    this.focalSource = null;
+    this.effectiveFocal = null;
     this.entrySeconds = 0;
     this.entryFinished = false;
     this.entryNextSlot = 0;
@@ -177,13 +224,14 @@ export class LayeredArtwork {
     for (let index = 0; index < this.voices.length; index++) {
       const art = this.voices[index].art;
       const progress = art.activeLayer?.age || 0;
-      art.setScene(scenes[index], immediate);
+      this.setVoiceScene(this.voices[index], scenes[index], immediate);
       // A layer that has never heard its assigned signal waits with empty ink.
       // Do not render eight unrelated ready-state posters over the audio art.
       // Explicit paper/ink controls rebuild at the held pen position, so an
       // orientation change during silence does not replace the art with blank paper.
       if (!art.layers.length && !art.blank) art.layers = [art.layer(art.current, progress)];
     }
+    this.syncFocal();
   }
   updateSignals(features, dt, available) {
     if (available && features.active) this.layoutTime += dt;
@@ -196,6 +244,7 @@ export class LayeredArtwork {
   }
   draw(dt, response, gentle, cycle) {
     if (!this.ready) return;
+    this.syncFocal();
     const ctx = this.context, scene = this.paperScene;
     ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
     ctx.fillStyle = scene.paper; ctx.fillRect(0, 0, scene.width, scene.height);
@@ -219,6 +268,7 @@ export class LayeredArtwork {
         gentle, cycle, canDraw, { paper: false, opacity: 0.72,
           initialInkAge: entering && canDraw ? ENTRY_FIRST_STROKE_AGE : 0 });
     }
+    this.syncFocal(); // The new lead may have entered its active layer this frame.
     if (this.entrySeconds >= ENTRY_DURATION_SECONDS) this.entryFinished = true;
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
   }
