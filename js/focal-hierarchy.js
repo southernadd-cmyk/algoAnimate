@@ -11,7 +11,7 @@ function samples(path) {
     if (p.length === 4) points.push({ x: (p[0].x + 3*p[1].x + 3*p[2].x + p[3].x)/8,
       y: (p[0].y + 3*p[1].y + 3*p[2].y + p[3].y)/8 });
   }
-  const matrix = path.transform?.match(/^matrix\\(([^)]+)\\)$/)?.[1].trim().split(/[ ,]+/).map(Number);
+  const matrix = path.transform?.match(/^matrix\(([^)]+)\)$/)?.[1].trim().split(/[ ,]+/).map(Number);
   return matrix?.length === 6 && matrix.every(Number.isFinite)
     ? points.map(p => ({ x: matrix[0]*p.x + matrix[2]*p.y + matrix[4],
       y: matrix[1]*p.x + matrix[3]*p.y + matrix[5] })) : points;
