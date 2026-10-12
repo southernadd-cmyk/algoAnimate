@@ -124,6 +124,8 @@ export class LayeredArtwork {
     this.entryFinished = false;
     this.entryNextSlot = 0;
     this.layoutTime = 0; // Seconds of audible performance; stops advancing in silence.
+    this.regionAccentTurns = 0;
+    this.lastRegionAccentTime = -Infinity;
     this.solo = null;
     this.focalRegion = null;
     this.effectiveFocal = null;
@@ -197,6 +199,7 @@ export class LayeredArtwork {
     }, { progress: 0, penTips: 0, visiblePaths: 0, inkLength: 0, layers: 0, cycles: 0 });
   }
   resetSound() {
+    this.regionAccentTurns = 0; this.lastRegionAccentTime = -Infinity;
     for (const voice of this.voices) {
       voice.generation++; voice.building = false; voice.pendingStyle = null; voice.art.discardQueued();
       voice.sound.reset(); voice.firstSoundSeed = true; voice.lastSceneTime = -1;
@@ -205,6 +208,7 @@ export class LayeredArtwork {
     }
   }
   clearInk() {
+    this.regionAccentTurns = 0; this.lastRegionAccentTime = -Infinity;
     this.focalRegion = null;
     this.focalSource = null;
     this.effectiveFocal = null;
@@ -236,7 +240,16 @@ export class LayeredArtwork {
     this.syncFocal();
   }
   updateSignals(features, dt, available) {
-    if (available && features.active) this.layoutTime += dt;
+    if (available && features.active) {
+      this.layoutTime += dt;
+      // A strong musical onset can turn the shared golden territories, but
+      // not every beat: the 7.5-second refractory period avoids frantic hops.
+      if (features.beat && (features.raw?.flux ?? 0) >= .18
+        && this.layoutTime - this.lastRegionAccentTime >= 7.5) {
+        this.regionAccentTurns++;
+        this.lastRegionAccentTime = this.layoutTime;
+      }
+    }
     const stopped = [];
     for (const voice of this.voices) {
       voice.flowing = voice.sound.update(features, dt, available && this.enabled(voice));
