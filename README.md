@@ -8,7 +8,7 @@
 
 AlgoAnimate listens to music or sound and draws marker strokes progressively onto one shared canvas. Each of eight voices responds to a different audio feature: bass, mids, treble, loudness, brightness, spectral change, bass + onsets, or mids + treble. It is a live interpretation rather than an instrument-recognition system. The composition uses golden-ratio structures, but overlapping voices do **not** guarantee a single collision-free or mathematically unified layout.
 
-**Experimental ensemble hierarchy:** Growth Systems (loudness) currently holds a persistent lead role and seven supporting voices use smaller mark budgets and redistribute their shared golden-angle anchors outside a reserved focal area, while lead anchors are drawn toward it. This makes space for a dominant composition without muting any voice or changing the sound mappings. Long lines and native forms may still cross the protected region, so this is a compositional bias rather than masking or guaranteed separation. The leader does not change during musical peaks.
+**Experimental ensemble hierarchy:** Growth Systems (loudness) currently holds a persistent lead role and seven supporting voices use smaller mark budgets and gently reduced ink emphasis around the focal region measured from the lead's actual vector paths. This makes space for a dominant composition without muting any voice or changing the sound mappings. Native forms remain intact: support strokes receive a gradual opacity and nib-width reduction near the focal region, rather than a geometric mask. New lead scenes update the focal area for subsequently generated support scenes. The leader does not change during musical peaks.
 
 ## Getting started
 
@@ -50,4 +50,4 @@ For detailed engine routing, capture, timing and visual mechanics, see [ARCHITEC
 
 ## Project status
 
-Experimental release v0.16. Visual composition, score compatibility and browser capture continue to evolve. The current artistic challenge is balancing eight independent golden-ratio systems into a coherent evolving ensemble, without losing individual musical responsiveness.
+Experimental release v0.17. Visual composition, score compatibility and browser capture continue to evolve. The current artistic challenge is balancing eight independent golden-ratio systems into a coherent evolving ensemble, without losing individual musical responsiveness.
