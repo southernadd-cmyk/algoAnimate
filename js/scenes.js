@@ -1,6 +1,7 @@
 import { clamp } from './features.js';
 import { prepareSceneGeometry, strokeWindow, inkWindow } from './ink.js';
 import { renderComposition } from './composition.js';
+import { ALGOART_RENDERER_VERSION } from './renderer-version.js';
 export { pathBounds } from './ink.js';
 
 export const DEFAULT_SETTINGS = Object.freeze({
@@ -43,7 +44,7 @@ export class SceneBuilder {
   }
   buildLocally(settings) {
     const A = window.AlgoArt, canvas = document.createElement('canvas');
-    A.rendererVersion = 7;
+    A.rendererVersion = ALGOART_RENDERER_VERSION;
     A.svgRecorder = { precise: true, paths: [], paperMarks: [] };
     try {
       renderComposition(A, canvas, settings);
