@@ -1,7 +1,7 @@
 import { SoundGate, SoundSeed, SILENCE, clamp, hash } from './features.js';
 import { AnimatedArtwork, DEFAULT_SETTINGS } from './scenes.js';
 import { styleSettings } from './styles.js';
-import { focalFromScene, softenSupportScene, stabilizeFocal } from './focal-hierarchy.js';
+import { focalFromScene, stabilizeFocal, easeFocal, FOCAL_TRANSITION_SECONDS } from './focal-hierarchy.js';
 
 export const LEAD_ROUTE_ID = 'organic';
 
@@ -124,6 +124,7 @@ export class LayeredArtwork {
     this.focalRegion = null;
     this.effectiveFocal = null;
     this.focalSource = null;
+    this.focalTransition = null;
     this.voices = ENGINE_ROUTES.map(route => ({ route, art: new AnimatedArtwork(canvas),
       muted: false,
       sound: new RoutedSound(route), flowing: false, building: false, generation: 0,
@@ -132,40 +133,35 @@ export class LayeredArtwork {
   }
   enabled(voice) { return !voice.muted && (!this.solo || this.solo === voice.route.id); }
   get leadVoice() { return this.voices.find(voice => voice.route.id === LEAD_ROUTE_ID); }
-  // Replace immutable vector scene and layer snapshots on focal changes. This
-  // preserves geometry, pen ages, pressure and exact score replay: ScoreCapture
-  // sees new scene/layer identities instead of silently changed old records.
-  restyleSupports(focal) {
-    for (const voice of this.voices) {
-      if (voice.route.id === LEAD_ROUTE_ID) continue;
-      const art = voice.art, cached = new Map();
-      const restyle = scene => {
-        if (!scene) return scene;
-        if (!cached.has(scene)) cached.set(scene, softenSupportScene(scene, focal));
-        return cached.get(scene);
-      };
-      art.current = restyle(art.current);
-      art.queued = restyle(art.queued);
-      art.layers = art.layers.map(layer => ({ ...layer, scene: restyle(layer.scene), pressure: layer.pressure.slice() }));
-    }
-  }
-  syncFocal() {
+  // Only the presentation focal point changes. Native scene geometry, ink
+  // layers and pressure arrays retain their identities through the transition.
+  syncFocal(dt = 0) {
     const lead = this.leadVoice;
     const source = lead.art.activeLayer?.scene || lead.art.current;
     const active = this.enabled(lead) && !lead.art.blank && Boolean(source);
-    if (active && source !== this.focalSource) {
-      this.focalRegion = stabilizeFocal(focalFromScene(source), this.focalRegion);
-      this.focalSource = source;
+    if (!active) {
+      this.focalRegion = this.effectiveFocal = this.focalSource = this.focalTransition = null;
+      return;
     }
-    const next = active ? this.focalRegion : null;
-    if (next !== this.effectiveFocal) {
-      this.effectiveFocal = next;
-      this.restyleSupports(next);
+    if (active && source !== this.focalSource) {
+      const next = stabilizeFocal(focalFromScene(source), this.focalRegion);
+      this.focalSource = source;
+      if (next !== this.focalRegion) {
+        this.focalRegion = next;
+        if (!this.effectiveFocal || this.effectiveFocal.rx !== next.rx || this.effectiveFocal.ry !== next.ry) {
+          this.effectiveFocal = next; this.focalTransition = null;
+        } else this.focalTransition = { from: this.effectiveFocal, to: next, elapsed: 0 };
+      }
+    }
+    if (this.focalTransition && dt > 0) {
+      const transition = this.focalTransition;
+      transition.elapsed = Math.min(FOCAL_TRANSITION_SECONDS, transition.elapsed + dt);
+      this.effectiveFocal = easeFocal(transition.from, transition.to, transition.elapsed);
+      if (transition.elapsed === FOCAL_TRANSITION_SECONDS) this.focalTransition = null;
     }
   }
   setVoiceScene(voice, scene, immediate = false, startNow = false) {
-    voice.art.setScene(voice.route.id === LEAD_ROUTE_ID ? scene
-      : softenSupportScene(scene, this.effectiveFocal), immediate, startNow);
+    voice.art.setScene(scene, immediate, startNow);
   }
   toggleSolo(id) {
     this.solo = this.solo === id ? null : id;
@@ -207,6 +203,7 @@ export class LayeredArtwork {
     this.focalRegion = null;
     this.focalSource = null;
     this.effectiveFocal = null;
+    this.focalTransition = null;
     this.entrySeconds = 0;
     this.entryFinished = false;
     this.entryNextSlot = 0;
@@ -244,7 +241,7 @@ export class LayeredArtwork {
   }
   draw(dt, response, gentle, cycle) {
     if (!this.ready) return;
-    this.syncFocal();
+    this.syncFocal(this.voices.some(voice => this.enabled(voice) && voice.flowing) ? dt : 0);
     const ctx = this.context, scene = this.paperScene;
     ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
     ctx.fillStyle = scene.paper; ctx.fillRect(0, 0, scene.width, scene.height);
@@ -266,6 +263,7 @@ export class LayeredArtwork {
       const ease = entering ? 0.8 + 0.2 * clamp(elapsed / ENTRY_RAMP_SECONDS) : 1;
       voice.art.draw(voice.sound.features, canDraw ? dt * ease : 0, response,
         gentle, cycle, canDraw, { paper: false, opacity: 0.72,
+          focal: voice.route.id === LEAD_ROUTE_ID ? null : this.effectiveFocal,
           initialInkAge: entering && canDraw ? ENTRY_FIRST_STROKE_AGE : 0 });
     }
     // Apply a mid-frame lead handoff next frame so scores capture what was actually painted.
