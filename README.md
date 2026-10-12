@@ -50,4 +50,4 @@ For detailed engine routing, capture, timing and visual mechanics, see [ARCHITEC
 
 ## Project status
 
-Experimental release v0.14. Visual composition, score compatibility and browser capture continue to evolve. The current artistic challenge is balancing eight independent golden-ratio systems into a coherent evolving ensemble, without losing individual musical responsiveness.
+Experimental release v0.15. Visual composition, score compatibility and browser capture continue to evolve. The current artistic challenge is balancing eight independent golden-ratio systems into a coherent evolving ensemble, without losing individual musical responsiveness.
