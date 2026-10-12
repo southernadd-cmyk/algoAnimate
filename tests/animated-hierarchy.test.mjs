@@ -46,8 +46,9 @@ test('Growth turns by sound-seeded golden angles without moving its fixed focal 
       assert.deepEqual(result.goldenFocal,anchor,'all rotated gestures retain their golden anchor');
       const repeat=prepareEnsembleScene(input);
       assert.deepEqual(result.paths.map(p=>p.d),repeat.paths.map(p=>p.d),'same seed, same rotation');
-      assert.equal(result.placement.rotation/GOLDEN_ANGLE,
-        Math.round(result.placement.rotation/GOLDEN_ANGLE),'orientations use integer golden turns');
+      assert.ok(Math.abs(result.placement.rotation / GOLDEN_ANGLE
+        - Math.round(result.placement.rotation / GOLDEN_ANGLE)) < 1e-12,
+        'orientations use integer golden turns');
       orientations.add(result.placement.rotation);
       for (const path of result.paths) for (const segment of path.geometry.segments)
         for (const p of segment.points) {
