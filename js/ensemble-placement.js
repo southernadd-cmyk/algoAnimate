@@ -25,7 +25,7 @@ function prepareEqualVoice(scene) {
   const bass = Math.max(0, Math.min(1, audio?.bass ?? 0));
   const onsets = Math.max(0, Math.min(1, audio?.onsets ?? 0));
   const matrices = prepared.paths.map(path => {
-    const m = path.transform?.match(/^matrix\\(([^)]+)\\)$/)?.[1].trim().split(/[ ,]+/).map(Number);
+    const m = path.transform?.match(/^matrix\(([^)]+)\)$/)?.[1].trim().split(/[ ,]+/).map(Number);
     return m?.length === 6 && m.every(Number.isFinite) ? m : [1, 0, 0, 1, 0, 0];
   });
   const point = (p, m) => ({ x: m[0] * p.x + m[2] * p.y + m[4],
@@ -49,7 +49,7 @@ function prepareEqualVoice(scene) {
   const target = { x: region.x + region.w * (.50 + .055 * (energy - .5)),
     y: region.y + region.h * (.50 + .055 * (onsets - .5)) };
   const paths = prepared.paths.map((path, i) => {
-    const tokens = path.d.match(/[MLCZ]|-?(?:\\d*\\.)?\\d+(?:e[-+]?\\d+)?/gi) || [];
+    const tokens = path.d.match(/[MLCZ]|-?(?:\d*\.)?\d+(?:e[-+]?\d+)?/gi) || [];
     const commands = [];
     for (let j = 0; j < tokens.length;) {
       const type = tokens[j++].toUpperCase(), count = { M: 1, L: 1, C: 3, Z: 0 }[type];
