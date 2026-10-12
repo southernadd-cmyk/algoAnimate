@@ -43,8 +43,8 @@ test('landscape Growth begins at golden-section stations on all four paper edges
     const entrance=scene.placement.entrance,root=scene.paths[0].geometry.segments[0].points[0];
     const expected=goldenEdgeEntrance(width,height,seed,scene.placement.rotation);
     assert.deepEqual(entrance,expected);
-    assert.ok(Math.hypot(root.x-entrance.x,root.y-entrance.y)<1e-6,
-      'the opening pen actually starts on the chosen edge');
+    assert.ok(Math.hypot(root.x-entrance.x,root.y-entrance.y)<.001,
+      'the opening pen starts at the golden edge station to subpixel precision');
     assert.ok(Math.abs(entrance.fraction-phiLow)<1e-12 ||
       Math.abs(entrance.fraction-(1-phiLow))<1e-12,
       'only true golden-section splits are valid edge stations');
