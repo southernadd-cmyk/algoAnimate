@@ -39,6 +39,7 @@ test('legacy version-1 scores preserve their already-faded vectors and reject ma
   for (let i = 0; i < 15; i++) { art.updateSignals(full, 1 / 30, true); art.draw(1 / 30, .6, false, 4); }
   const capture = new ScoreCapture(0); capture.capture(0, art, full, false);
   const current = capture.finish(), legacy = JSON.parse(JSON.stringify(current));
+  assert.equal(current.renderer, 8, 'new captures record V8 while older vector scores remain replayable');
   legacy.version = 1; delete legacy.hierarchyLead;
   legacy.frames = legacy.frames.map(frame => frame.slice(0, 5));
   legacy.layers.forEach(layer => { if (!Array.isArray(layer.pressure)) layer.pressure = unpackVectors({ vectors: layer.pressure }); });
