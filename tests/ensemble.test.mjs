@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { ENGINE_ROUTES, RoutedSound, LayeredArtwork,
   ENTRY_STAGGER_SECONDS, ENTRY_DURATION_SECONDS, ENTRY_FIRST_STROKE_AGE } from '../js/ensemble.js';
 import { SILENCE } from '../js/features.js';
+import { ensembleSettings } from '../js/ensemble.js';
+import { protectFocalAnchor, goldenLanePoint } from '../js/phi-layout.js';
 import { captureSheet, sheetSVG } from '../js/export.js';
 import { ScoreCapture, ScoreReplay, parseScore } from '../js/scores.js';
 
@@ -11,6 +13,24 @@ const sound = values => {
   const raw = Object.fromEntries(keys.map(key => [key, values[key] || 0]));
   return { ...SILENCE, ...raw, raw, active: true, rms: 0.1 };
 };
+
+test('ensemble lead is persistent and supporting anchor positions protect its focal reserve', () => {
+  const lead = ENGINE_ROUTES[0], support = ENGINE_ROUTES[1];
+  const a = ensembleSettings(lead, 'TEST', 'landscape', 'marker', 25);
+  const b = ensembleSettings(support, 'TEST', 'landscape', 'marker', 25);
+  assert.equal(a.ensembleRole, 'lead');
+  assert.equal(b.ensembleRole, 'support');
+  assert.ok(a.elements >= b.elements);
+  const anchor = { x: 1400 * 0.382, y: 1000 * 0.382, slot: 10 };
+  assert.deepEqual(protectFocalAnchor(anchor, 1400, 1000, 'lead'), anchor);
+  const shifted = protectFocalAnchor(anchor, 1400, 1000, 'support');
+  assert.ok(Math.hypot((shifted.x - anchor.x) / (1400 * 0.19),
+    (shifted.y - anchor.y) / (1000 * 0.20)) >= 1);
+  const outside = goldenLanePoint(1400, 1000, 4, 8, 2);
+  assert.deepEqual(protectFocalAnchor(outside, 1400, 1000, 'lead'), outside);
+  assert.deepEqual(protectFocalAnchor(anchor, 1400, 1000, 'support'), shifted,
+    'Same scaffold input must produce the same relocated anchor');
+});
 
 test('the ensemble assigns all eight real engines to six inputs and two combinations', () => {
   assert.equal(new Set(ENGINE_ROUTES.map(route => route.id)).size, 8);
