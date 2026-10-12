@@ -253,6 +253,34 @@ test('solo/mute isolates visible ink, holds excluded clocks and resumes them wit
   assert.ok(art.voices[1].art.activeLayer.age > held[0]);
 });
 
+test('scores replay every frame through moving, interrupted and muted focal transitions without duplicate support geometry', () => {
+  const { art } = fixture(), capture = new ScoreCapture(0), expected = [];
+  const lead = art.leadVoice;
+  const moveLead = x => art.setVoiceScene(lead, { seed: 'MOVING-' + x, mode: LEAD_ROUTE_ID,
+    width: 1000, height: 700, paper: '#fff', paperMarks: [],
+    paths: [{ d: `M ${x} 290 C ${x + 20} 310 ${x + 70} 390 ${x + 90} 430`,
+      stroke: '#000', width: 3, opacity: .8 }] }, false, true);
+  for (let frame = 0; frame < 120; frame++) {
+    if (frame === 20) moveLead(750);
+    if (frame === 28) moveLead(250);
+    if (frame === 60) art.toggleMute(LEAD_ROUTE_ID);
+    if (frame === 72) art.toggleMute(LEAD_ROUTE_ID);
+    art.updateSignals(full, 1 / 30, true); art.draw(1 / 30, .7, false, 4);
+    capture.capture(frame * 1000 / 30, art, full, false);
+    expected.push(sheetSVG(captureSheet(art)));
+  }
+  const score = capture.finish(), replay = new ScoreReplay(parseScore(JSON.stringify(score)));
+  assert.equal(score.scenes.filter(scene => scene.mode !== LEAD_ROUTE_ID).length, ENGINE_ROUTES.length - 1,
+    'Only actual new compositions receive geometry records');
+  assert.ok(score.frames.some(frame => frame[5] === null), 'Mute records full-strength support ink');
+  assert.ok(new Set(score.frames.filter(frame => frame[5]).map(frame => JSON.stringify(frame[5]))).size > 30,
+    'The test includes actual per-frame focal easing');
+  for (let frame = 0; frame < score.frames.length; frame++) {
+    replay.seek(score.frames[frame][0]);
+    assert.equal(sheetSVG(replay.sheet()), expected[frame], 'Moving focal frame ' + frame);
+  }
+});
+
 test('scores reproduce every visible vector frame, including future pressure, mixing, clear and density changes', () => {
   const { art } = fixture(), capture = new ScoreCapture(0), expected = [];
   let time = 0;

@@ -39,7 +39,7 @@ test('three minutes at full density retains the whole score, bounded geometry an
     const running = capture.capture(time * 1000, artwork, features, false);
     if (frame < 5400) assert.equal(running, true, 'Score ended early at ' + time.toFixed(2) + ' seconds; bytes=' + capture.bytes + '; scenes=' + capture.data.scenes.length);
     else assert.equal(running, false, 'The normal three-minute limit still applies');
-    if (frame % 75 === 1 || frame === 5400) expected.set(frame, sheetSVG(captureSheet(artwork)));
+    if ([1, 20, 38].includes(frame % 75) || frame === 5400) expected.set(frame, sheetSVG(captureSheet(artwork)));
   }
   const score = capture.finish(), text = JSON.stringify(score);
   assert.equal(score.duration, 180000);
