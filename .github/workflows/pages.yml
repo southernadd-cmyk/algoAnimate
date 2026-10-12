@@ -19,6 +19,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Verify vendored AlgoArt against pinned upstream commit
+        run: bash scripts/verify-vendor.sh
       - name: Syntax, assets and audio tests
         run: npm run check && npm test
       - name: Install browser test tools
