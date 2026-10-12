@@ -26,6 +26,7 @@ export function nativeRenderer() {
     renderComposition(A, { getContext: () => context }, settings);
     return prepareEnsembleScene({ ...A.svgRecorder, mode: route.id, seed, style: settings.style,
       ensembleRole: settings.ensembleRole, interlock: settings.interlock, sharedAnchor,
+      composition: { audio: settings.audioControls },
       width: A.W, height: A.H, paper: settings.paper, inkMemory: settings.inkMemory,
       markHierarchy: settings.markHierarchy, phraseScale: settings.phraseScale });
   };

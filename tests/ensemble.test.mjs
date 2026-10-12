@@ -15,23 +15,18 @@ const sound = values => {
   return { ...SILENCE, ...raw, raw, active: true, rms: 0.1 };
 };
 
-test('ensemble companions retain enough ink and gesture budget to participate in the focal drawing', () => {
-  const lead = ensembleSettings(ENGINE_ROUTES.find(route => route.id === 'organic'), 'TEST', 'landscape', 'marker', 25);
-  for (const route of ENGINE_ROUTES.filter(route => route.id !== 'organic')) {
-    const partner = ensembleSettings(route, 'TEST', 'landscape', 'marker', 25);
-    assert.ok(partner.elements >= Math.floor(lead.elements * .70), route.id + ' must have useful marks');
-    assert.ok(partner.inkMemory >= .30, route.id + ' ink must last long enough to interact');
-    assert.ok(partner.inkMemory < lead.inkMemory, route.id + ' should not replace the focal voice');
+test('all eight engines have equal composition status and independent audio budgets', () => {
+  const baseline = ensembleSettings(ENGINE_ROUTES[0], 'TEST', 'landscape', 'marker', 25);
+  for (const route of ENGINE_ROUTES) {
+    const own = ensembleSettings(route, 'TEST', 'landscape', 'marker', 25);
+    assert.equal(own.ensembleRole, 'equal');
+    assert.equal(own.elements, baseline.elements, 'no fixed lead-size bonus: ' + route.id);
+    assert.equal(own.inkMemory, baseline.inkMemory, 'no fixed lead-ink bonus: ' + route.id);
+    assert.equal(own.negativeSpace, baseline.negativeSpace, 'no support empty-space tax: ' + route.id);
+    assert.deepEqual(own.interlock, { lane: ENGINE_ROUTES.indexOf(route), lanes: 8, phase: 0 });
   }
-});
-
-test('ensemble hierarchy retains a stable loudness lead with independent support audio routes', () => {
-  const lead = ENGINE_ROUTES.find(route => route.id === 'organic');
-  assert.equal(ensembleSettings(lead, 'TEST', 'landscape', 'marker', 25).ensembleRole, 'lead');
-  for (const route of ENGINE_ROUTES.filter(route => route.id !== 'organic')) {
-    assert.equal(ensembleSettings(route, 'TEST', 'landscape', 'marker', 25).ensembleRole, 'support');
-  }
-  assert.deepEqual(ENGINE_ROUTES.find(route => route.id === 'organic').inputs, ['level']);
+  assert.deepEqual(ENGINE_ROUTES.find(route => route.id === 'organic').inputs, ['level'],
+    'Growth responds to its own loudness channel, but does not outrank other voices');
 });
 
 test('legacy version-1 scores preserve their already-faded vectors and reject malformed new focal/vector data', () => {

@@ -31,108 +31,111 @@ test('golden placement composes transforms, stays on paper, and accents a gestur
   assert.equal(free.goldenFocal,undefined);
 });
 
-test('V8 Growth preserves native multi-root paths, placement and edge entries in both orientations', () => {
-  const render = nativeRenderer();
-  const growth = ENGINE_ROUTES.find(route => route.id === 'organic');
-  for (const orientation of ['landscape', 'portrait']) {
-    let edgeEntries = 0, interiors = 0;
-    for (let i = 0; i < 24; i++) {
-      const seed = 'V8-NATIVE-ROOT-' + i;
-      const args = { orientation, density: 60, profile };
-      const free = render(growth, seed, { ...args, sharedAnchor: false });
-      const placed = render(growth, seed, { ...args, sharedAnchor: true });
-      assert.equal(placed.placement.nativeGrowth, true);
-      assert.equal(placed.placement.scale, 1, 'fitting must not pull edge roots off the paper');
-      assert.equal(placed.goldenFocal, undefined,
-        'the focal region must track actual lead ink rather than a fixed intersection');
-      assert.deepEqual(placed.paths.map(path => path.d).sort(), free.paths.map(path => path.d).sort(),
-        'native V8 pen coordinates must survive the ensemble adapter exactly');
-      assert.deepEqual(placed.paths.map(path => path.transform).sort(), free.paths.map(path => path.transform).sort());
-      const starts = placed.paths.map(path => path.geometry.segments[0]?.points[0]).filter(Boolean);
-      const edge = starts.some(p => p.x < 20 || p.y < 20 ||
-        p.x > placed.width - 20 || p.y > placed.height - 20);
-      if (edge) edgeEntries++;
-      else interiors++;
-      const repeat = render(growth, seed, args);
-      assert.deepEqual(placed.paths.map(path => path.d), repeat.paths.map(path => path.d),
-        'V8 rendering and placement remain deterministic for each sound seed');
-    }
-    assert.ok(edgeEntries > 0, orientation + ' must retain genuine V8 edge entrances');
-    assert.ok(interiors > 0, orientation + ' must also retain interior-root compositions');
-  }
-});
-
-test('manual Growth vectors are never relocated or rotated by the shared-anchor adapter', () => {
-  const root = { width: 1400, height: 1000, mode: 'organic', ensembleRole: 'lead',
-    seed: 'V8-NATIVE', markHierarchy: true, paths: [
-      { d: 'M 5 382 C 80 330 150 420 300 490', width: 3, opacity: .8, role: 'gesture', motif: 1 },
-      { d: 'M 535 618 C 600 700 700 720 760 790', width: 3, opacity: .8, role: 'gesture', motif: 2 }
-    ] };
-  const input = JSON.stringify(root);
-  const placed = prepareEnsembleScene(root);
-  assert.equal(JSON.stringify(root), input, 'native input remains unchanged');
-  assert.deepEqual(placed.paths.map(path => path.d).sort(), root.paths.map(path => path.d).sort());
-  assert.equal(placed.placement.nativeGrowth, true);
-  assert.equal(placed.goldenFocal, undefined);
-});
-
-test('supporting engine positions bridge into the focal area without collapsing onto Growth', () => {
-  for (const [width, height] of [[1400, 1000], [1000, 1400]]) {
-    const anchor = ensembleAnchor(width, height);
-    const scene = { width, height, ensembleRole:'support', markHierarchy:true,
-      paths:[{ d:'M 200 200 C 250 330 470 160 550 400',
-        width:3, opacity:.7, role:'gesture', motif:1 }] };
-    const outer = prepareEnsembleScene({...scene,mode:'field',interlock:{lane:0,lanes:8}});
-    const connector = prepareEnsembleScene({...scene,mode:'network',interlock:{lane:0,lanes:8}});
-    const distance = ({x,y}) => Math.hypot((x-anchor.x)/width,(y-anchor.y)/height);
-    assert.ok(distance(connector.placement.target) < distance(outer.placement.target));
-    assert.ok(distance(outer.placement.target) > 0);
-    assert.ok(connector.placement.scale > outer.placement.scale);
-    for (const prepared of [outer,connector]) for (const path of prepared.paths)
-      for (const segment of path.geometry.segments) for (const point of segment.points) {
-        assert.ok(point.x >= width*.04-1e-5 && point.x <= width*.96+1e-5);
-        assert.ok(point.y >= height*.04-1e-5 && point.y <= height*.96+1e-5);
+test('eight golden territories tile the entire paper in either orientation', async () => {
+  const { goldenRegions, voiceRegion, GOLDEN_SHARE } = await import('../js/golden-regions.js');
+  for (const [width, height] of [[1400,1000],[1000,1400]]) {
+    const cells = goldenRegions(width,height);
+    assert.equal(cells.length,8);
+    const total = cells.reduce((sum, r) => sum + r.w*r.h,0);
+    assert.ok(Math.abs(total-width*height) < 1e-5);
+    for (let i=0;i<cells.length;i++) {
+      const a=cells[i];
+      assert.ok(a.w>0&&a.h>0&&a.x>=0&&a.y>=0);
+      assert.ok(a.x+a.w<=width+1e-6&&a.y+a.h<=height+1e-6);
+      assert.equal(voiceRegion(width,height,i).voice,i);
+      for(let j=i+1;j<cells.length;j++) {
+        const b=cells[j];
+        const overlap=Math.max(0,Math.min(a.x+a.w,b.x+b.w)-Math.max(a.x,b.x))
+          *Math.max(0,Math.min(a.y+a.h,b.y+b.h)-Math.max(a.y,b.y));
+        assert.ok(overlap<1e-6,'regions must tessellate without hard overlaps');
       }
+    }
+    const firstFour=cells.slice(0,4);
+    const w=Math.max(...firstFour.map(r=>r.x+r.w))-Math.min(...firstFour.map(r=>r.x));
+    const h=Math.max(...firstFour.map(r=>r.y+r.h))-Math.min(...firstFour.map(r=>r.y));
+    assert.ok(Math.abs((width>=height?w/width:h/height)-GOLDEN_SHARE)<1e-9,
+      'the top-level recursive cut must be exactly phi-derived');
+    const shifted=goldenRegions(width,height,.51);
+    assert.notDeepEqual(shifted.map(r=>r.voice),cells.map(r=>r.voice),
+      'golden-angle phrase rotation must reassign voice territories');
+    assert.deepEqual(goldenRegions(width,height,.51),shifted,'territory rotation is deterministic');
   }
 });
 
-test('native animated ensemble shares ink with Growth through partial strokes and scene handoffs', () => {
+test('all native engines occupy separate golden regions without frames or lead fading', () => {
   const render = nativeRenderer();
   for (const orientation of ['landscape','portrait']) {
-    const ratios=[];
-    for (let seed=0;seed<12;seed++) {
-      const canvas={ width:0,height:0,getContext:()=>context },art=new LayeredArtwork(canvas);
-      const styles = new StyleDeck(seed), kits = ENGINE_ROUTES.map(route=>({route,art:{}}));
-      for(const kit of kits) kit.pendingStyle=styles.next(kits,'mix',`ANIMATED-${seed}`,kit.route.id,profile);
-      const build=(route,generation)=>render(route,`ANIMATED-${seed}-${generation}`,{orientation,density:25,profile,
-        style:kits.find(kit=>kit.route.id===route.id).pendingStyle});
-      art.setScenes(ENGINE_ROUTES.map(route=>build(route,0)),true);
-      for(let frame=0;frame<120;frame++) {
-        const time=frame*.1;
-        if(frame===45||frame===87) for(const voice of art.voices) art.setVoiceScene(voice,build(voice.route,frame),false,true);
-        const level=time<2?.12:.65,values={...profile,level,mid:.3+.15*Math.sin(time),flux:.15+.15*Math.max(0,Math.sin(time*4))};
-        art.updateSignals({...SILENCE,...values,raw:values,active:true},.1,true);
-        art.draw(.1,.6,false,4);
-        if(frame<10) continue;
-        assert.ok(art.effectiveFocal, 'a live Growth lead should create a real focal region');
-        const anchor = art.effectiveFocal;
-        assert.ok(anchor.x >= anchor.rx && anchor.x <= canvas.width-anchor.rx);
-        assert.ok(anchor.y >= anchor.ry && anchor.y <= canvas.height-anchor.ry);
-        let lead=0,support=0;
-        for(const voice of art.voices) for(const layer of voice.art.layers) {
-          const ink=visibleFocalInk(layer,anchor,voice.art.current.inkMemory,voice!==art.leadVoice);
-          if(voice===art.leadVoice) lead+=ink;else support+=ink;
-        }
-        if(lead+support>0) ratios.push(lead/(lead+support));
+    const scenes=ENGINE_ROUTES.map(route=>render(route,'EQUAL-VOICE-'+route.id,{orientation,density:30,profile}));
+    const regions=scenes.map(scene=>scene.placement.region);
+    assert.equal(new Set(regions.map(region=>region.index)).size,8);
+    for(const scene of scenes) {
+      assert.equal(scene.ensembleRole,'equal');
+      assert.equal(scene.placement.equalVoice,true);
+      assert.equal(scene.goldenFocal,undefined);
+      const region=scene.placement.region, epsilon=.19;
+      assert.ok(scene.paths.length>0,scene.mode+' must actually draw');
+      for(const path of scene.paths)for(const seg of path.geometry.segments)for(const p of seg.points) {
+        assert.ok(p.x>=region.x-region.w*epsilon-1&&p.x<=region.x+region.w*(1+epsilon)+1,
+          scene.mode+' must remain near its golden territory');
+        assert.ok(p.y>=region.y-region.h*epsilon-1&&p.y<=region.y+region.h*(1+epsilon)+1,
+          scene.mode+' must remain near its golden territory');
       }
+      const repeated=render(ENGINE_ROUTES.find(r=>r.id===scene.mode),'EQUAL-VOICE-'+scene.mode,
+        {orientation,density:30,profile});
+      assert.deepEqual(scene.paths.map(path=>path.d),repeated.paths.map(path=>path.d),
+        'seed+sound+phrase placement must be deterministic');
     }
-    const mean=ratios.reduce((a,b)=>a+b,0)/ratios.length;
-    const collaborative=ratios.filter(x=>x>=.3&&x<=.8).length/ratios.length;
-    console.log(orientation,{mean,collaborative});
-    assert.ok(mean>.30&&mean<.8,orientation+' ensemble focal balance: '+mean.toFixed(3));
-    // V8 distributes several roots across the paper rather than forcing one
-    // stable top-left anchor. Require substantial overlap without reinstating
-    // V7's fixed placement merely to meet its old 50% threshold.
-    assert.ok(collaborative>.35,orientation+' lead and partners must share visible ink: '+collaborative.toFixed(3));
+  }
+});
+
+test('Growth joins the other equal voices and responds to audio and phrase changes', () => {
+  const render=nativeRenderer(), route=ENGINE_ROUTES.find(route=>route.id==='organic');
+  for(const orientation of ['landscape','portrait']) {
+    const args={orientation,density:40,profile};
+    const free=render(route,'ROOTS',{...args,sharedAnchor:false});
+    const still=render(route,'ROOTS',args);
+    const louder=render(route,'ROOTS',{...args,profile:{...profile,level:1}});
+    const next=render(route,'ROOTS',{...args,phase:.51});
+    assert.notDeepEqual(still.paths.map(p=>p.d),free.paths.map(p=>p.d),'native roots are composed within their territory');
+    assert.equal(still.placement.equalVoice,true);
+    assert.equal(still.placement.region.voice,ENGINE_ROUTES.findIndex(r=>r.id==='organic'));
+    assert.notEqual(still.placement.scale,louder.placement.scale,'audio changes the drawn extent');
+    assert.notEqual(still.placement.region.index,next.placement.region.index,'phrases redistribute the regions');
+  }
+});
+
+test('strong onsets rotate golden territory assignments with a silence-safe cooldown', () => {
+  const art=new LayeredArtwork({width:1400,height:1000,getContext:()=>context});
+  const change={...SILENCE,active:true,beat:true,flux:.8,raw:{...SILENCE.raw,flux:.8}};
+  art.updateSignals(change,.1,true);
+  assert.equal(art.regionAccentTurns,1);
+  art.updateSignals(change,1,true);
+  assert.equal(art.regionAccentTurns,1,'one sustained sound must not rearrange the sheet repeatedly');
+  art.updateSignals(SILENCE,100,false);
+  assert.equal(art.regionAccentTurns,1,'silence does not advance region assignments');
+  art.updateSignals(change,8,true);
+  assert.equal(art.regionAccentTurns,2,'a later accented phrase may change the territories');
+  art.resetSound();
+  assert.equal(art.regionAccentTurns,0,'new audio source starts a fresh phrase arrangement');
+});
+
+test('active eight-voice animation has no central lead and stays on a shared sheet', () => {
+  const render=nativeRenderer();
+  for(const orientation of ['landscape','portrait']) {
+    const canvas={width:0,height:0,getContext:()=>context}, art=new LayeredArtwork(canvas);
+    const scenes=ENGINE_ROUTES.map(route=>render(route,'ONE-SHEET-'+route.id,{orientation,density:25,profile}));
+    art.setScenes(scenes,true);
+    assert.equal(art.effectiveFocal,null);
+    for(let frame=0;frame<40;frame++) {
+      art.updateSignals({...SILENCE,...profile,raw:profile,active:true},.1,true);
+      art.draw(.1,.6,false,4);
+      assert.equal(art.effectiveFocal,null,'no voice dims neighbouring marks around a focal leader');
+      assert.equal(art.voices.length,8);
+      assert.equal(art.paperScene.width,scenes[0].width);
+    }
+    assert.ok(art.voices.some(v=>v.art.stats.visiblePaths>0),'the ensemble must draw');
+    const still=art.layoutTime;
+    art.updateSignals(SILENCE,.5,false);
+    assert.equal(art.layoutTime,still,'silent time must not rotate the regions');
   }
 });

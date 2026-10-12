@@ -8,7 +8,7 @@ import { captureSheet, sheetSVG } from '../js/export.js';
 import { StyleDeck } from '../js/styles.js';
 import { nativeRenderer } from './helpers/native-renderer.mjs';
 
-test('three minutes at full density retains the whole score, bounded geometry and exact moving-focal replay', () => {
+test('three minutes at full density retains the whole score, bounded geometry and equal-voice replay', () => {
   globalThis.Path2D = class { constructor(d) { this.d = d; } };
   const context = Object.fromEntries(['fillRect','setLineDash','beginPath','moveTo','lineTo','bezierCurveTo','stroke','save','restore','transform']
     .map(key => [key, () => {}]));
@@ -44,12 +44,14 @@ test('three minutes at full density retains the whole score, bounded geometry an
   const score = capture.finish(), text = JSON.stringify(score);
   assert.equal(score.duration, 180000);
   assert.equal(score.frames.length, 5401);
-  assert.ok(score.scenes.length <= geometryChanges, 'Focal motion must not create scene records');
+  assert.ok(score.scenes.length <= geometryChanges, 'Audio-driven region updates must not add duplicate scene records');
+  assert.ok(score.frames.every(frame => frame[5] === null),
+    'Equal-voice capture must never record the old Growth-only focal fade');
   assert.ok(Buffer.byteLength(text) < MAX_SCORE_BYTES * .8, 'Full-density capture must remain below its early cutoff');
   const replay = new ScoreReplay(parseScore(text));
   for (const [frame, svg] of expected) {
     replay.seek(score.frames[frame][0]);
-    assert.equal(sheetSVG(replay.sheet()), svg, 'Exact geometry, fading and pressure at frame ' + frame);
+    assert.equal(sheetSVG(replay.sheet()), svg, 'Exact geometry, shared ink and pressure at frame ' + frame);
   }
   console.log(JSON.stringify({ density: 100, seconds: 180, frames: score.frames.length,
     scenes: score.scenes.length, nativeCompositions: geometryChanges, layers: score.layers.length,

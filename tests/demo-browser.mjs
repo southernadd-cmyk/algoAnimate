@@ -226,11 +226,22 @@ try {
     assert.ok(Buffer.byteLength(denseText) < MAX_SCORE_BYTES * .8, 'Lossless vectors remain below the score cutoff');
     assert.ok(denseScore.scenes.length <= afterDense.compositions - beforeDense.compositions + 24,
       'Restyling must not add extra scene records');
-    let focalChanges = 0;
-    for (let i = 1; i < denseScore.frames.length; i++) {
-      if (JSON.stringify(denseScore.frames[i][5]) !== JSON.stringify(denseScore.frames[i - 1][5])) focalChanges++;
+    // New eight-voice captures have no privileged lead, hence no focal fade.
+    // Do not weaken score coverage: prove that all eight independent voices
+    // regenerate geometry during the full three-minute performance.
+    assert.ok(denseScore.frames.every(frame => frame[5] === null),
+      'Equal-voice score frames must not fade seven voices around Growth');
+    const voiceCompositions = Object.fromEntries(
+      [...new Set(denseScore.scenes.map(scene => scene.mode))].map(mode => [
+        mode, new Set(denseScore.scenes
+          .filter(scene => scene.mode === mode)
+          .map(scene => scene.vectors.data)).size
+      ]));
+    assert.equal(Object.keys(voiceCompositions).length, 8,
+      'All eight voices must appear in the dense captured score');
+    for (const [mode, changes] of Object.entries(voiceCompositions)) {
+      assert.ok(changes >= 2, mode + ' must redraw under changing sound');
     }
-    assert.ok(focalChanges > 30, 'The dense take must exercise moving focal transitions');
     const probe = new ScoreReplay(denseScore); probe.seek(denseScore.duration);
     await page.click('#replayScore');
     await page.locator('#scoreSeek').evaluate(el => { el.value = el.max; el.dispatchEvent(new Event('input', { bubbles: true })); });
@@ -246,7 +257,7 @@ try {
     assert.ok(seconds >= 179 && seconds <= 185, 'Video reaches the three-minute capture limit');
     const report = { density: 100, videoSeconds: seconds, scoreMilliseconds: denseScore.duration,
       scoreBytes: Buffer.byteLength(denseText), scenes: denseScore.scenes.length, frames: denseScore.frames.length,
-      focalChanges, newCompositions: afterDense.compositions - beforeDense.compositions, replay: 'exact SVG' };
+      equalVoiceNoFocal: true, voiceCompositions, newCompositions: afterDense.compositions - beforeDense.compositions, replay: 'exact SVG' };
     await writeFile(resolve(results, 'dense-recording-report.json'), JSON.stringify(report, null, 2));
     console.log('PASS: dense three-minute music recording, full score and exact replay.', report);
     await page.click('#leaveReplay'); await resumeDemo();

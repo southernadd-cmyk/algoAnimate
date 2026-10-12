@@ -34,6 +34,12 @@ export function interlockRenderer(A, settings) {
     }
     return makeR.call(this, seed);
   });
+  // An equal voice now owns an entire golden region. Keep its native ALGO/ART
+  // phi placement inside that region rather than imposing an unrelated
+  // whole-paper sunflower lane before fitting it. The stable makeR adapter
+  // above still avoids rehashing tiny audio-control changes.
+  if (settings.ensembleRole === 'equal')
+    return () => { for (const [name, method] of originals) A[name] = method; };
   const point = (i, count) => goldenLanePoint(A.W, A.H, i, count, lane, lanes, phase);
   let focal = 0;
   const phiPoint = A.phiPoint;
