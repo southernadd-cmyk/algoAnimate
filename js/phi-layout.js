@@ -22,15 +22,15 @@ export function goldenLanePoint(width, height, index, count, lane, lanes = 8, ph
 // of the lead's focal area, while retaining their assigned golden-angle lanes.
 // Native long strokes can still cross it; this is a compositional bias, not clipping.
 export function protectFocalAnchor(anchor, width, height, role = 'support') {
-  if (role === 'lead') return anchor;
+  if (role === 'lead') return { ...anchor, x: width * 0.382 + (anchor.x - width * 0.382) * 0.42, y: height * 0.382 + (anchor.y - height * 0.382) * 0.42 };
   const cx = width * 0.382, cy = height * 0.382;
   const rx = width * 0.19, ry = height * 0.20;
   const dx = (anchor.x - cx) / rx, dy = (anchor.y - cy) / ry;
   const radius = Math.hypot(dx, dy);
-  if (radius >= 1 || radius === 0 && !Number.isFinite(anchor.slot)) return anchor;
-  const angle = radius ? Math.atan2(dy, dx) : (anchor.slot + 1) * GOLDEN_ANGLE;
-  return { ...anchor, x: cx + Math.cos(angle) * rx * 1.03,
-    y: cy + Math.sin(angle) * ry * 1.03 };
+  if (radius >= 1) return anchor;
+  const angle = radius ? Math.atan2(dy, dx) : ((Number.isFinite(anchor.slot) ? anchor.slot : 0) + 1) * GOLDEN_ANGLE;
+  return { ...anchor, x: cx + Math.cos(angle) * rx * (1 + 0.55 * (1 - radius)),
+    y: cy + Math.sin(angle) * ry * (1 + 0.55 * (1 - radius)) };
 }
 
 export function interlockRenderer(A, settings) {
@@ -57,7 +57,8 @@ export function interlockRenderer(A, settings) {
   replace('phiPoint', function (s, random) {
     const native = phiPoint.call(this, s, random), anchor = point(focal++ % Math.max(1, s.elements), s.elements);
     const pull = s.phiStrength / 100;
-    return { x: native.x + (anchor.x - native.x) * pull, y: native.y + (anchor.y - native.y) * pull };
+    const blended = { x: native.x + (anchor.x - native.x) * pull, y: native.y + (anchor.y - native.y) * pull, slot: anchor.slot };
+    return settings.ensembleRole === 'support' ? protectFocalAnchor(blended, A.W, A.H, 'support') : blended;
   });
   replace('goldenCanvasPoint', function (i, count) { return point(i, count); });
   const distributed = A.distributedPhiPoints;
