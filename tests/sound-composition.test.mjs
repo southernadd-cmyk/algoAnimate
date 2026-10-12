@@ -96,7 +96,7 @@ test('sound-seeded kits repeat across sessions while eight reservations remain d
   assert.equal(new Set(a.map(style => style.pen.id)).size, 8);
   assert.equal(new Set(a.map(style => style.palette.id)).size, 8);
 });
-test('golden lanes interleave on the whole sheet and renderer hooks restore after use', () => {
+test('golden lane math remains valid, but equal voices retain native per-region geometry', () => {
   for (const [width, height] of [[1400, 1000], [1000, 1400]]) {
     const points = ENGINE_ROUTES.flatMap((route, lane) => Array.from({ length: 8 }, (_, i) => goldenLanePoint(width, height, i, 8, lane)));
     assert.equal(new Set(points.map(p => `${p.x},${p.y}`)).size, 64);
@@ -104,8 +104,12 @@ test('golden lanes interleave on the whole sheet and renderer hooks restore afte
     assert.ok(Math.abs(points[8].a - points[0].a - GOLDEN_ANGLE) < 1e-9);
   }
   const A = { W: 1400, H: 1000, goldenCanvasPoint() { return { x: 1, y: 1 }; } }, original = A.goldenCanvasPoint;
-  const restore = interlockRenderer(A, settings('field', 0.5));
-  assert.notEqual(A.goldenCanvasPoint, original); restore(); assert.equal(A.goldenCanvasPoint, original);
+  const equal = interlockRenderer(A, settings('field', 0.5));
+  assert.equal(A.goldenCanvasPoint, original, 'equal voices preserve their native phi composition');
+  equal(); assert.equal(A.goldenCanvasPoint, original);
+  // Historical interlock geometry remains available for legacy score fixtures.
+  const legacy = interlockRenderer(A, { ...settings('field', 0.5), ensembleRole: 'support' });
+  assert.notEqual(A.goldenCanvasPoint, original); legacy(); assert.equal(A.goldenCanvasPoint, original);
 });
 test('nearby continuous controls and different ink do not rehash the native layout dice', () => {
   const received = [], A = { makeR(seed) { received.push(seed); } }, original = A.makeR;
