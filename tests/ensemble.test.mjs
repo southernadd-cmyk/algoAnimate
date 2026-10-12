@@ -33,6 +33,27 @@ test('ensemble lead is persistent and supporting anchor positions protect its fo
     'Same scaffold input must produce the same relocated anchor');
 });
 
+test('sampled scaffold reserves coherent lead coverage without a support boundary spike', () => {
+  const width = 1400, height = 1000, cx = width * 0.382, cy = height * 0.382;
+  const rx = width * 0.19, ry = height * 0.20;
+  const radial = point => Math.hypot((point.x - cx) / rx, (point.y - cy) / ry);
+  for (const count of [3, 8, 20]) {
+    const lead = Array.from({ length: count }, (_, i) =>
+      protectFocalAnchor(goldenLanePoint(width, height, i, count, 3), width, height, 'lead'));
+    assert.ok(lead.filter(point => radial(point) < 1).length >= Math.ceil(count * 0.5),
+      'At least half the loudness lead anchors should occupy the focal region');
+    const support = Array.from({ length: count }, (_, i) =>
+      protectFocalAnchor(goldenLanePoint(width, height, i, count, 1), width, height, 'support'));
+    assert.ok(support.every(point => radial(point) >= 1 - 1e-10),
+      'Supporting anchors avoid the central reserve');
+    const displaced = Array.from({ length: count }, (_, i) => goldenLanePoint(width, height, i, count, 1))
+      .map((point, i) => ({ before: radial(point), after: radial(support[i]) }))
+      .filter(point => point.before < 1);
+    if (displaced.length >= 2) assert.ok(new Set(displaced.map(point => point.after.toFixed(4))).size > 1,
+      'Displaced anchors must not collapse onto one radius');
+  }
+});
+
 test('the ensemble assigns all eight real engines to six inputs and two combinations', () => {
   assert.equal(new Set(ENGINE_ROUTES.map(route => route.id)).size, 8);
   assert.deepEqual(ENGINE_ROUTES.filter(route => route.inputs.length === 1).map(route => route.inputs[0]).sort(), [...keys].sort());
