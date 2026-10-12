@@ -4,6 +4,9 @@ on:
     branches: [main]
     paths:
       - 'js/**'
+      - 'vendor/algoart/**'
+      - 'scripts/verify-vendor.sh'
+      - 'fonts/**'
       - 'tests/**'
       - '.github/workflows/integration-check.yml'
 jobs:
@@ -14,6 +17,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Verify pinned ALGO/ART source
+        run: bash scripts/verify-vendor.sh
       - name: Static checks and unit tests
         run: npm run check && npm test
       - name: Install Playwright
