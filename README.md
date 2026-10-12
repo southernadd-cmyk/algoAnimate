@@ -8,7 +8,7 @@
 
 AlgoAnimate listens to music or sound and draws marker strokes progressively onto one shared canvas. Each of eight voices responds to a different audio feature: bass, mids, treble, loudness, brightness, spectral change, bass + onsets, or mids + treble. It is a live interpretation rather than an instrument-recognition system. The composition uses golden-ratio structures, but overlapping voices do **not** guarantee a single collision-free or mathematically unified layout.
 
-**Experimental ensemble hierarchy:** Growth Systems (loudness) holds a persistent lead role. Its actual vector paths determine an edge-safe focal region; seven supporting voices use smaller mark budgets and gentler ink inside that region. Focal moves ease over one second of active drawing, including existing support ink, and pause with the music. Soloing or muting the lead immediately restores full support ink. Native forms and pen pressure remain intact: the moving focal area affects opacity and nib width at drawing time. The leader does not change during musical peaks.
+**Experimental ensemble hierarchy:** Growth Systems (loudness) holds a persistent lead at the upper-left golden intersection (38.2% across and down). Its defining gesture starts first and remains legible through scene handoffs. Supporting compositions occupy the other golden intersections at a smaller φ-related scale, with gentler ink near the lead. Scenes are fitted inside the paper once when built; existing marks never slide around. Soloing or muting the lead immediately restores full support ink. Uncheck **Shared golden anchor** under **Audio & motion** to compare free placement with the same listening and pen behaviour. The leader does not change during musical peaks.
 
 ## Getting started
 
@@ -26,7 +26,7 @@ Desktop Chrome is the initial target for browser-tab audio. Permissions, tab/sys
 
 ## Preservation and reproducibility
 
-Scores store a versioned file format and vector geometry, so playback does not need to regenerate scenes from the current ALGO/ART renderer. Version-2 scores save native geometry once, use lossless compression for vectors and completed pressure records, and record the displayed focal ellipse in each frame. Moving fades replay exactly without duplicating scenes. The score's renderer field is retained as provenance; support is governed by the score-format version. Existing version-1 score files remain supported with their original baked-in ink. Imported scores are checked for valid geometry, references, sizes, bounded decompression and paint values.
+Scores store a versioned file format and vector geometry, so playback does not need to regenerate scenes from the current ALGO/ART renderer. Version-2 and version-3 scores save vector geometry once, use lossless compression for vectors and completed pressure records, and record the displayed focal ellipse in each frame. Moving fades replay exactly without duplicating scenes. The score's renderer field is retained as provenance; support is governed by the score-format version. Version-3 scores also record the support fade strength. Earlier version-2 scores retain their original 55% fade; version-1 scores retain their baked-in ink. Imported scores are checked for valid geometry, references, sizes, bounded decompression and paint values.
 
 The underlying ALGO/ART source is pinned and kept unmodified under `vendor/algoart/`. CI verifies its SHA-256 equality against the [recorded upstream commit](vendor/algoart/PROVENANCE.md). Changes to rendering behaviour should preserve saved scores and historical ALGO/ART artworks.
 
@@ -50,4 +50,4 @@ For detailed engine routing, capture, timing and visual mechanics, see [ARCHITEC
 
 ## Project status
 
-Experimental release v0.18. Visual composition, score compatibility and browser capture continue to evolve. The current artistic challenge is balancing eight independent golden-ratio systems into a coherent evolving ensemble, without losing individual musical responsiveness.
+Experimental release v0.19. Visual composition, score compatibility and browser capture continue to evolve. The current artistic challenge is balancing eight independent golden-ratio systems into a coherent evolving ensemble, without losing individual musical responsiveness.

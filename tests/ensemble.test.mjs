@@ -4,8 +4,8 @@ import { ENGINE_ROUTES, RoutedSound, LayeredArtwork,
   LEAD_ROUTE_ID, ENTRY_STAGGER_SECONDS, ENTRY_DURATION_SECONDS, ENTRY_FIRST_STROKE_AGE } from '../js/ensemble.js';
 import { SILENCE } from '../js/features.js';
 import { ensembleSettings } from '../js/ensemble.js';
-import { captureSheet, sheetSVG } from '../js/export.js';
-import { ScoreCapture, ScoreReplay, parseScore } from '../js/scores.js';
+import { captureSheet, sheetSVG, layerStrokes } from '../js/export.js';
+import { ScoreCapture, ScoreReplay, parseScore, SCORE_FORMAT_VERSION } from '../js/scores.js';
 import { packVectors, unpackVectors } from '../js/score-vectors.js';
 import { softenSupportScene } from '../js/focal-hierarchy.js';
 
@@ -115,6 +115,22 @@ function fixture() {
   return { art, commands };
 }
 const full = sound(Object.fromEntries(keys.map(key => [key, 0.4])));
+
+test('old version-2 scores retain their original fade and new scores save the stronger fade explicitly', () => {
+  const { art } = fixture();
+  for(let i=0;i<20;i++){art.updateSignals(full,1/30,true);art.draw(1/30,.6,false,4);}
+  const capture=new ScoreCapture(0);capture.capture(0,art,full,false);
+  const score=capture.finish();
+  assert.equal(score.supportOpacityReduction,.75);
+  assert.equal(sheetSVG(new ScoreReplay(parseScore(JSON.stringify(score))).sheet()),sheetSVG(captureSheet(art)));
+  score.version=2; delete score.supportOpacityReduction;
+  const old = new ScoreReplay(parseScore(JSON.stringify(score))).sheet();
+  const expected = {...art.paperScene,paths:art.voices.flatMap(voice=>voice.art.layers.flatMap(layer=>
+    layerStrokes(layer,false,.72,voice.art.current.inkMemory,voice===art.leadVoice?null:art.effectiveFocal,.55)))};
+  assert.equal(sheetSVG(old),sheetSVG(expected));
+  score.supportOpacityReduction=2;
+  assert.throws(()=>parseScore(JSON.stringify(score)),/supported/);
+});
 
 test('first clean-sheet sound staggers ink and eases pen speeds without restarting existing strokes', () => {
   const { art } = fixture();
@@ -306,7 +322,7 @@ test('scores reproduce every visible vector frame, including future pressure, mi
     const invalid = JSON.parse(text); invalid.renderer = invalidRenderer;
     assert.throws(() => parseScore(JSON.stringify(invalid)));
   }
-  const unsupportedFormat = JSON.parse(text); unsupportedFormat.version = 3;
+  const unsupportedFormat = JSON.parse(text); unsupportedFormat.version = SCORE_FORMAT_VERSION + 1;
   assert.throws(() => parseScore(JSON.stringify(unsupportedFormat)));
   const malicious = JSON.parse(text), vectors = unpackVectors(malicious.scenes[0]);
   vectors.paths[0].stroke = 'url(https://example.com)'; malicious.scenes[0].vectors = packVectors(vectors);

@@ -3,9 +3,10 @@ import { markerGeometry } from './ink.js';
 import { layerStrokes } from './export.js';
 import { ALGOART_RENDERER_VERSION } from './renderer-version.js';
 import { packVectors, unpackVectors, MAX_SCORE_VECTOR_BYTES } from './score-vectors.js';
+import { SUPPORT_OPACITY_REDUCTION } from './focal-hierarchy.js';
 
 export const SCORE_FORMAT = 'algoanimate-score';
-export const SCORE_FORMAT_VERSION = 2;
+export const SCORE_FORMAT_VERSION = 3;
 // Renderer is provenance, not a replay dependency: scores contain vector geometry.
 export const MAX_SCORE_BYTES = 20 * 1024 * 1024;
 const keys = ['level', 'bass', 'mid', 'treble', 'centroid', 'flux'];
@@ -32,7 +33,8 @@ export class ScoreCapture {
     this.sceneIds = new WeakMap(); this.layerIds = new WeakMap(); this.paperIds = new WeakMap();
     this.openLayers = new Map();
     this.data = { format: SCORE_FORMAT, version: SCORE_FORMAT_VERSION, renderer: ALGOART_RENDERER_VERSION, source,
-      featureKeys: keys, hierarchyLead: null, scenes: [], layers: [], papers: [], frames: [], duration: 0 };
+      featureKeys: keys, hierarchyLead: null, supportOpacityReduction: SUPPORT_OPACITY_REDUCTION,
+      scenes: [], layers: [], papers: [], frames: [], duration: 0 };
   }
   sceneId(scene) {
     if (this.sceneIds.has(scene)) return this.sceneIds.get(scene);
@@ -133,15 +135,16 @@ function validatePath(d) {
 export function parseScore(text) {
   if (typeof text !== 'string' || text.length > MAX_SCORE_BYTES) fail();
   const score = JSON.parse(text);
-  if (score?.format !== SCORE_FORMAT || ![1, SCORE_FORMAT_VERSION].includes(score.version) || !Number.isInteger(score.renderer) || score.renderer < 1 || score.renderer > 1000) fail();
-  if (score.version === 2 && (!Number.isInteger(score.hierarchyLead) || score.hierarchyLead < 0 || score.hierarchyLead >= 8)) fail();
+  if (score?.format !== SCORE_FORMAT || ![1, 2, SCORE_FORMAT_VERSION].includes(score.version) || !Number.isInteger(score.renderer) || score.renderer < 1 || score.renderer > 1000) fail();
+  if (score.version >= 2 && (!Number.isInteger(score.hierarchyLead) || score.hierarchyLead < 0 || score.hierarchyLead >= 8)) fail();
   array(score.frames, 5500); array(score.scenes, 5000); array(score.layers, 10000); array(score.papers, 200);
   if (!score.frames.length || !score.papers.length) fail();
   number(score.duration, 0, 180000);
+  if (score.version >= 3 || score.supportOpacityReduction !== undefined) number(score.supportOpacityReduction, 0, 1);
   let pathCount = 0, vectorBytes = 0;
   for (const scene of score.scenes) {
     number(scene.inkMemory, 0, 2);
-    if (score.version === 2) {
+    if (score.version >= 2) {
       if (!Number.isInteger(scene.pathCount) || scene.pathCount < 0 || scene.pathCount > 10000) fail();
       if (!Number.isInteger(scene.vectors?.bytes) || (vectorBytes += scene.vectors.bytes) > MAX_SCORE_VECTOR_BYTES) fail();
     }
@@ -149,7 +152,7 @@ export function parseScore(text) {
     try { vectors = score.version === 1 ? scene : unpackVectors(scene); } catch { fail(); }
     array(vectors.paths, 10000); array(vectors.schedule, 10000);
     if (vectors.paths.length !== vectors.schedule.length || (pathCount += vectors.paths.length) > 100000
-      || (score.version === 2 && scene.pathCount !== vectors.paths.length)) fail();
+      || (score.version >= 2 && scene.pathCount !== vectors.paths.length)) fail();
     vectors.paths.forEach((path, i) => {
       validatePath(path.d);
       colour(path.stroke); number(path.width, 0, 100); number(path.opacity, 0, 1);
@@ -174,7 +177,7 @@ export function parseScore(text) {
     ref(layer.scene, score.scenes);
     let pressure;
     try {
-      if (score.version === 2 && !Array.isArray(layer.pressure)) {
+      if (score.version >= 2 && !Array.isArray(layer.pressure)) {
         if (!Number.isInteger(layer.pressure?.bytes) || (vectorBytes += layer.pressure.bytes) > MAX_SCORE_VECTOR_BYTES) fail();
         pressure = unpackVectors({ vectors: layer.pressure });
       } else pressure = layer.pressure;
@@ -197,7 +200,7 @@ export function parseScore(text) {
       if (voice.length !== 4) fail(); number(voice[0], 0, 1); number(voice[1], 0, 1); number(voice[2], 0, 2); array(voice[3], 3);
       for (const layer of voice[3]) { array(layer, 2); if (layer.length !== 2) fail(); ref(layer[0], score.layers); number(layer[1], 0, 5); }
     }
-    if (score.version === 2 && frame[5] !== null) {
+    if (score.version >= 2 && frame[5] !== null) {
       array(frame[5], 4); if (frame[5].length !== 4) fail();
       const paper = score.papers[frame[2]], [x, y, rx, ry] = frame[5];
       number(x, 0, paper.width); number(y, 0, paper.height);
@@ -230,7 +233,7 @@ export class ScoreReplay {
     const frame = this.frame, paper = this.score.papers[frame[2]];
     if (this.focalFrame !== frame) {
       this.focalFrame = frame;
-      const f = this.score.version === 2 ? frame[5] : null;
+      const f = this.score.version >= 2 ? frame[5] : null;
       this.focal = f ? { x: f[0], y: f[1], rx: f[2], ry: f[3] } : null;
     }
     const active = new Set(frame[4].flatMap(voice => voice[3].map(([id]) => this.score.layers[id].scene)));
@@ -251,7 +254,7 @@ export class ScoreReplay {
     return { ...paper, paths: frame[4].flatMap((voice, index) => voice[3].flatMap(([id, age]) => {
       const layer = this.layers.get(id);
       return layerStrokes({ ...layer, age, scene: this.scenes.get(layer.scene) }, Boolean(frame[3]), 0.72, voice[2],
-        index === this.score.hierarchyLead ? null : this.focal);
+        index === this.score.hierarchyLead ? null : this.focal, this.score.supportOpacityReduction ?? .55);
     })) };
   }
 }

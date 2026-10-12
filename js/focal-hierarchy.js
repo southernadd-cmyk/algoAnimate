@@ -5,6 +5,8 @@ import { markerGeometry } from './ink.js';
 const sampleCache = new WeakMap();
 const influenceCache = new WeakMap();
 export const FOCAL_TRANSITION_SECONDS = 1;
+export const SUPPORT_OPACITY_REDUCTION = .75;
+export const SUPPORT_WIDTH_REDUCTION = .22;
 
 function samples(path) {
   const cached = sampleCache.get(path);
@@ -108,8 +110,8 @@ export function softenSupportScene(scene, focal) {
     if (!focal) return { ...scene.paths[index], opacity: path.opacity, width: path.width };
     const influence = influences[index];
     // This biases whole recorded strokes; it never clips or erases them.
-    return { ...scene.paths[index], opacity: (path.opacity ?? 1) * (1 - .55 * influence),
-      width: path.width * (1 - .22 * influence) };
+    return { ...scene.paths[index], opacity: (path.opacity ?? 1) * (1 - SUPPORT_OPACITY_REDUCTION * influence),
+      width: path.width * (1 - SUPPORT_WIDTH_REDUCTION * influence) };
   });
   return { ...scene, hierarchyBasePaths: basePaths, paths };
 }

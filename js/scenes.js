@@ -2,7 +2,8 @@ import { clamp } from './features.js';
 import { prepareSceneGeometry, strokeWindow, inkWindow } from './ink.js';
 import { renderComposition } from './composition.js';
 import { ALGOART_RENDERER_VERSION } from './renderer-version.js';
-import { supportInfluences } from './focal-hierarchy.js';
+import { supportInfluences, SUPPORT_OPACITY_REDUCTION, SUPPORT_WIDTH_REDUCTION } from './focal-hierarchy.js';
+import { prepareEnsembleScene } from './ensemble-placement.js';
 export { pathBounds } from './ink.js';
 
 export const DEFAULT_SETTINGS = Object.freeze({
@@ -49,7 +50,8 @@ export class SceneBuilder {
     A.svgRecorder = { precise: true, paths: [], paperMarks: [] };
     try {
       renderComposition(A, canvas, settings);
-      return prepareSceneGeometry({ ...A.svgRecorder, seed: settings.seed, mode: settings.mode, style: settings.style,
+      return prepareEnsembleScene({ ...A.svgRecorder, seed: settings.seed, mode: settings.mode, style: settings.style,
+        ensembleRole: settings.ensembleRole, sharedAnchor: settings.sharedAnchor, interlock: settings.interlock,
         composition: { audio: settings.audioControls, interlock: settings.interlock, elements: settings.elements,
           curveBias: settings.curveBias, shapeAmount: settings.shapeAmount, rotation: settings.rotation,
           elementScale: settings.elementScale, nesting: settings.nesting, inkMemory: settings.inkMemory },
@@ -197,8 +199,8 @@ export class AnimatedArtwork {
       }
       ctx.strokeStyle = entry.stroke;
       const influence = influences?.[i] || 0;
-      ctx.lineWidth = entry.width * (1 - .22 * influence) * layer.pressure[i];
-      ctx.globalAlpha = clamp(entry.opacity * (1 - .55 * influence)) * opacity;
+      ctx.lineWidth = entry.width * (1 - SUPPORT_WIDTH_REDUCTION * influence) * layer.pressure[i];
+      ctx.globalAlpha = clamp(entry.opacity * (1 - SUPPORT_OPACITY_REDUCTION * influence)) * opacity;
       ctx.lineCap = entry.lineCap || 'round'; ctx.lineJoin = 'round';
       ctx.globalCompositeOperation = entry.blend || 'source-over';
       ctx.setLineDash(entry.dash || []);

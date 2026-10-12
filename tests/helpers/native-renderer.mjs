@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { renderComposition } from '../../js/composition.js';
-import { prepareSceneGeometry } from '../../js/ink.js';
+import { prepareEnsembleScene } from '../../js/ensemble-placement.js';
 import { ensembleSettings } from '../../js/ensemble.js';
 
 // Run the real pinned engines and vector preparation, using a no-op raster
@@ -19,11 +19,12 @@ export function nativeRenderer() {
     restore() { Object.assign(this, stack.pop()); },
     scale() {}, transform() {}, translate() {}, rotate() {}, fillRect() {}, beginPath() {},
     moveTo() {}, lineTo() {}, bezierCurveTo() {}, stroke() {}, setLineDash() {} };
-  return (route, seed, { orientation = 'landscape', density = 100, profile, style = null, phase = 0 } = {}) => {
+  return (route, seed, { orientation = 'landscape', density = 100, profile, style = null, phase = 0, sharedAnchor = true } = {}) => {
     const settings = ensembleSettings(route, seed, orientation, 'marker', density, style, profile, phase);
     A.rendererVersion = 7; A.svgRecorder = { precise: true, paths: [], paperMarks: [] };
     renderComposition(A, { getContext: () => context }, settings);
-    return prepareSceneGeometry({ ...A.svgRecorder, mode: route.id, seed, style: settings.style,
+    return prepareEnsembleScene({ ...A.svgRecorder, mode: route.id, seed, style: settings.style,
+      ensembleRole: settings.ensembleRole, interlock: settings.interlock, sharedAnchor,
       width: A.W, height: A.H, paper: settings.paper, inkMemory: settings.inkMemory,
       markHierarchy: settings.markHierarchy, phraseScale: settings.phraseScale });
   };

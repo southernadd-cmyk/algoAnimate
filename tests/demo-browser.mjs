@@ -65,6 +65,15 @@ async function resumeDemo() {
 try {
   await page.goto(`http://127.0.0.1:${server.address().port}/`);
   await page.waitForFunction(() => window.AlgoAnimate?.diagnostics().paths > 0);
+  assert.equal(await page.locator('#sharedAnchor').isChecked(),true);
+  await page.locator('#tuningDetails').evaluate(element=>{element.open=true;});
+  const anchoredCount=(await state()).compositions;
+  await page.uncheck('#sharedAnchor');
+  await page.waitForFunction(count=>window.AlgoAnimate.diagnostics().compositions>count&&!window.AlgoAnimate.diagnostics().building,anchoredCount);
+  const freeCount=(await state()).compositions;
+  await page.check('#sharedAnchor');
+  await page.waitForFunction(count=>window.AlgoAnimate.diagnostics().compositions>count&&!window.AlgoAnimate.diagnostics().building,freeCount);
+  await page.locator('#tuningDetails').evaluate(element=>{element.open=false;});
   assert.equal(await page.title(), await page.locator('meta[property="og:title"]').getAttribute('content'));
   assert.equal(await page.locator('.source-main > button').first().getAttribute('id'), 'playDemo');
   assert.equal(await page.locator('.source-button.primary').getAttribute('id'), 'playDemo');

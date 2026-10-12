@@ -249,6 +249,7 @@ function syncControls() {
   $('playDemo').setAttribute('aria-busy', String(demoLoading));
   $('stopAudio').disabled = !audio.kind || pending || startRecordPending;
   $('orientation').disabled = recorder.busy || startRecordPending || Boolean(replay);
+  $('sharedAnchor').disabled = recorder.busy || startRecordPending || Boolean(replay);
   $('includeWaveform').disabled = recorder.busy || startRecordPending;
   $('record').disabled = Boolean(replay) || !audio.kind || !recorder.mimeType || !artwork.ready || locked || preparing;
   $('record').hidden = recorder.busy;
@@ -352,8 +353,8 @@ player.addEventListener('error', () => {
 });
 
 function settings(voice, seed, style) {
-  return ensembleSettings(voice.route, seed, $('orientation').value, 'marker', +$('density').value,
-    style, voice.sound.profile, goldenRotationPhase(artwork.layoutTime));
+  return { ...ensembleSettings(voice.route, seed, $('orientation').value, 'marker', +$('density').value,
+    style, voice.sound.profile, goldenRotationPhase(artwork.layoutTime)), sharedAnchor: $('sharedAnchor').checked };
 }
 async function generateAll(immediate = false) {
   const request = ++layoutGeneration; preparing = true;
@@ -405,10 +406,10 @@ async function generateVoice(voice, seed) {
     }
   } finally { if (request === voice.generation) { voice.building = false; voice.pendingStyle = null; } }
 }
-for (const id of ['orientation', 'palette', 'density']) {
+for (const id of ['orientation', 'palette', 'density', 'sharedAnchor']) {
   $(id).addEventListener('change', () => {
     if (replay || (id === 'orientation' && recorder.busy)) return;
-    generateAll(id === 'orientation' || !soundGate.open);
+    generateAll(id === 'orientation' || id === 'sharedAnchor' || !soundGate.open);
   });
 }
 for (const id of ['sensitivity', 'motion', 'evolution', 'smoothing', 'density']) {

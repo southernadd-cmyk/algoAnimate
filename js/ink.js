@@ -120,7 +120,7 @@ export function prepareSceneGeometry(scene) {
   const paths = scene.paths.map(entry => ({
     ...entry, geometry: markerGeometry(entry.d), ...pathBounds(entry.d)
   }));
-  const schedule = strokeSchedule(paths);
+  let schedule;
   if (scene.markHierarchy) {
     // Choose one native gesture as the leading motif. Its overdraw passes
     // share the emphasis; frames and supporting rectangles never become leads.
@@ -130,15 +130,21 @@ export function prepareSceneGeometry(scene) {
       const weight = entry.extent * (entry.geometry.segments.some(segment => segment.type === 'C') ? 1.3 : 1);
       if (weight > score) { lead = entry.motif; score = weight; }
     }
+    // A lead scene starts with its defining gesture on the three pens. Keeping
+    // it legible through the phrase bridges consecutive scene generations.
+    if (scene.ensembleRole === 'lead') paths.sort((a, b) => Number(b.motif === lead) - Number(a.motif === lead));
+    schedule = strokeSchedule(paths);
     for (let i = 0; i < paths.length; i++) if (paths[i].motif === lead) {
       paths[i].accent = true;
-      paths[i].width *= 1.28;
+      paths[i].width *= scene.ensembleRole === 'lead' ? (1 + Math.sqrt(5)) / 2 : 1.28;
       paths[i].opacity = Math.min(0.95, paths[i].opacity * 1.28);
       // Let the whole leading stroke become legible, remain briefly, then
       // recede by arc length. Other ink retains the sparse rolling window.
-      schedule[i].complete = true; schedule[i].hold = 0.12;
+      schedule[i].complete = true;
+      schedule[i].hold = scene.ensembleRole === 'lead' ? .72 : .12;
     }
   }
+  schedule ||= strokeSchedule(paths);
   const motifMemory = Math.max(0, ...schedule.filter(timing => timing.complete)
     .map(timing => timing.duration + timing.hold));
   return { ...scene, paths, schedule, motifMemory, geometryPrepared: true };

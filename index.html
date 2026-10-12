@@ -22,7 +22,7 @@
       <h1>Sound, in living ink.</h1>
       <p class="intro-note">One sound. Eight voices. 24 pens. <span>Sound shapes every mark.</span></p>
     </div>
-    <div class="masthead-note"><span class="edition">v0.18 · LIVE DRAWING STUDIO</span><a href="https://southernadd-cmyk.github.io/algoart/" target="_blank" rel="noopener">From ALGO / ART ↗</a></div>
+    <div class="masthead-note"><span class="edition">v0.19 · LIVE DRAWING STUDIO</span><a href="https://southernadd-cmyk.github.io/algoart/" target="_blank" rel="noopener">From ALGO / ART ↗</a></div>
   </header>
   <main>
     <div class="studio">
@@ -81,6 +81,7 @@
             <div class="range-control"><label for="motion">Pen response</label><output for="motion" id="motionValue">60%</output><input type="range" id="motion" min="0" max="100" value="60"><div class="range-note"><span>Even pressure</span><span>Sound-driven</span></div></div>
             <div class="range-control"><label for="smoothing">Smoothing</label><output for="smoothing" id="smoothingValue">55%</output><input type="range" id="smoothing" min="0" max="100" value="55"><div class="range-note"><span>Immediate</span><span>Fluid</span></div></div>
             <label class="check-label"><input type="checkbox" id="gentle"> Gentle motion</label>
+            <label class="check-label"><input type="checkbox" id="sharedAnchor" checked> Shared golden anchor</label>
           </details>
           <p class="control-note">Pause the sound to hold the drawing. Play again and the pens pick up where they left off.</p>
         </section>
@@ -88,7 +89,7 @@
       </aside>
     </div>
   </main>
-  <footer><span>ALGO / ANIMATE <span class="footer-dot">·</span> v0.18</span><span>Sound stays in your browser. No account. No uploads.</span><a href="https://github.com/southernadd-cmyk/algoAnimate" target="_blank" rel="noopener">Source on GitHub ↗</a></footer>
+  <footer><span>ALGO / ANIMATE <span class="footer-dot">·</span> v0.19</span><span>Sound stays in your browser. No account. No uploads.</span><a href="https://github.com/southernadd-cmyk/algoAnimate" target="_blank" rel="noopener">Source on GitHub ↗</a></footer>
   <dialog id="previewDialog"><div class="dialog-heading"><h2>Your recorded take</h2><button type="button" id="closePreview" aria-label="Close recording preview">✕</button></div><video id="recordingPreview" controls playsinline></video></dialog>
   <script src="./vendor/algoart/phi.js"></script>
   <script src="./vendor/algoart/random.js"></script>

@@ -1,3 +1,13 @@
+## v0.19 persistent golden anchor
+
+The ensemble places Growth Systems at (1/φ², 1/φ²) and distributes support focal regions among the remaining golden intersections. `prepareEnsembleScene` maps each scene's native focal geometry to its assigned point and uniformly fits its complete cubic control hull inside a 4% paper margin. Supports use a further 1/φ scale. Affine transforms are baked into path coordinates once in both worker and fallback builds; nib widths and the original vendored engines are preserved.
+
+The lead's defining native motif starts on the first pens, has a φ-width accent and a longer hold, and the lead has a larger sound-sensitive retention budget. Supporting ink fades by up to 75% opacity and 22% width around the fixed lead region. Muting/solo exclusion releases that fade; each voice retains its independent audio gate, pressure and clock. The optional free-layout comparison bypasses placement while keeping the current audio and timing policy.
+
+Animated regressions exercise 12 seeds per orientation, distinct sound-seeded kits, quiet-to-loud signals, partial strokes, retiring layers and two early handoffs. Arc-length samples weighted by opacity, nib width and latched pressure require a mean lead share above 60% and a share above 60% in at least 75% of post-entry samples inside the golden region. This is a vector-ink measurement, not a claim about colour contrast or perception.
+
+Score format 3 records the support-opacity reduction explicitly. Readers still accept formats 1 and 2; format-2 imports use the historical 55% reduction. The geometry, schedule and per-frame ellipse remain self-contained. Format-3 files are rejected by older readers instead of silently replaying with a different fade.
+
 # Architecture and development notes
 
 This document preserves the detailed v0.14 README describing the original implementation and testing approach. See [README.md](README.md) for the concise user guide.

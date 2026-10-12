@@ -1,8 +1,9 @@
 import { clamp } from './features.js';
 import { inkWindow, strokeWindow } from './ink.js';
-import { supportInfluences } from './focal-hierarchy.js';
+import { supportInfluences, SUPPORT_OPACITY_REDUCTION, SUPPORT_WIDTH_REDUCTION } from './focal-hierarchy.js';
 
-export function layerStrokes(layer, gentle = false, opacity = 0.72, inkMemory = layer.scene.inkMemory ?? 0.7, focal = null) {
+export function layerStrokes(layer, gentle = false, opacity = 0.72, inkMemory = layer.scene.inkMemory ?? 0.7, focal = null,
+  supportOpacityReduction = SUPPORT_OPACITY_REDUCTION) {
   const scene = layer.scene, memory = inkMemory * (gentle ? 8 / 7 : 1);
   const influences = supportInfluences(scene, focal);
   const paths = [];
@@ -15,8 +16,8 @@ export function layerStrokes(layer, gentle = false, opacity = 0.72, inkMemory = 
     const d = from === 0 && to === 1 ? entry.d
       : strokeWindow(entry.geometry, from, to).map(command => command.join(' ')).join(' ');
     const influence = influences?.[index] || 0;
-    paths.push({ d, stroke: entry.stroke, width: entry.width * (1 - .22 * influence) * (layer.pressure[index] ?? 1),
-      opacity: clamp(entry.opacity * (1 - .55 * influence)) * opacity, lineCap: entry.lineCap || 'round',
+    paths.push({ d, stroke: entry.stroke, width: entry.width * (1 - SUPPORT_WIDTH_REDUCTION * influence) * (layer.pressure[index] ?? 1),
+      opacity: clamp(entry.opacity * (1 - supportOpacityReduction * influence)) * opacity, lineCap: entry.lineCap || 'round',
       blend: entry.blend || 'source-over', transform: entry.transform,
       dash: entry.dash || [], dashOffset: (entry.dashOffset || 0) + from * entry.geometry.length });
   });
