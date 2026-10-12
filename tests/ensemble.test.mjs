@@ -229,6 +229,15 @@ test('scores reproduce every visible vector frame, including future pressure, mi
   parsed.frames.forEach((frame, index) => { replay.seek(frame[0]); assert.equal(sheetSVG(replay.sheet()), expected[index], 'Frame ' + index); });
   replay.seek(0); replay.advance(100); assert.equal(replay.paused, true);
   replay.seek(0); replay.paused = true; replay.advance(1); assert.equal(replay.time, 0);
+  const futureRenderer = JSON.parse(text); futureRenderer.renderer = 8;
+  assert.equal(sheetSVG(new ScoreReplay(parseScore(JSON.stringify(futureRenderer))).sheet()), expected[0],
+    'Saved vectors remain replayable after upgrading the composition renderer');
+  for (const invalidRenderer of [0, -1, '8', null, 1.5]) {
+    const invalid = JSON.parse(text); invalid.renderer = invalidRenderer;
+    assert.throws(() => parseScore(JSON.stringify(invalid)));
+  }
+  const unsupportedFormat = JSON.parse(text); unsupportedFormat.version = 2;
+  assert.throws(() => parseScore(JSON.stringify(unsupportedFormat)));
   const malicious = JSON.parse(text); malicious.scenes[0].paths[0].stroke = 'url(https://example.com)';
   assert.throws(() => parseScore(JSON.stringify(malicious)));
   const badRef = JSON.parse(text); badRef.frames[0][2] = 9999;
