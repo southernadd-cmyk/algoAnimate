@@ -1,4 +1,4 @@
-import { prepareSceneGeometry } from './ink.js';
+import { prepareSceneGeometry, markerGeometry } from './ink.js';
 import { focalFromScene } from './focal-hierarchy.js';
 import { voiceRegion } from './golden-regions.js';
 
@@ -64,6 +64,12 @@ function prepareEqualVoice(scene) {
     return { ...path, d: commands.join(' '), transform: undefined, geometry: undefined,
       width: path.width * Math.sqrt(Math.max(0.1, scale)) };
   });
+  for (let i = 0; i < paths.length; i++) {
+    try { markerGeometry(paths[i].d); }
+    catch (error) { throw new Error('Invalid transformed ' + scene.mode + ' path #' + i
+      + ': ' + JSON.stringify({ d: paths[i].d.slice(0, 280), original: prepared.paths[i].d.slice(0, 180), scale, region })
+      + ' (' + error.message + ')'); }
+  }
   return prepareSceneGeometry({ ...scene, paths, markHierarchy: false,
     placement: { region, target, scale, equalVoice: true, bleed: .08 } });
 }
