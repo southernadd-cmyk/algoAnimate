@@ -232,11 +232,11 @@ try {
     assert.ok(denseScore.frames.every(frame => frame[5] === null),
       'Equal-voice score frames must not fade seven voices around Growth');
     const voiceCompositions = Object.fromEntries(
-      new Set(denseScore.scenes.map(scene => scene.mode)));
-    for (const mode of Object.keys(voiceCompositions)) {
-      const scenes = denseScore.scenes.filter(scene => scene.mode === mode);
-      voiceCompositions[mode] = new Set(scenes.map(scene => scene.vectors.data)).size;
-    }
+      [...new Set(denseScore.scenes.map(scene => scene.mode))].map(mode => [
+        mode, new Set(denseScore.scenes
+          .filter(scene => scene.mode === mode)
+          .map(scene => scene.vectors.data)).size
+      ]));
     assert.equal(Object.keys(voiceCompositions).length, 8,
       'All eight voices must appear in the dense captured score');
     for (const [mode, changes] of Object.entries(voiceCompositions)) {
