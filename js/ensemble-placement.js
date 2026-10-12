@@ -43,8 +43,9 @@ function prepareEqualVoice(scene) {
   const centre = { x: Number.isFinite(minX + maxX) ? (minX + maxX) / 2 : scene.width / 2,
     y: Number.isFinite(minY + maxY) ? (minY + maxY) / 2 : scene.height / 2 };
   // Drawing breathes to its OWN audio channel, not another voice's loudness.
-  // Golden cells remain a complete tiling; 8% bleed avoids a boxed-in look.
-  const reach = .79 + .26 * energy + .07 * bass;
+  // Golden cells tessellate, but lively marks should cross their invisible
+  // boundaries: a typical passage reaches ~8% beyond its own territory.
+  const reach = .94 + .28 * energy + .08 * bass;
   const scale = Math.min(1.3, region.w * reach / contentWidth, region.h * reach / contentHeight);
   const target = { x: region.x + region.w * (.50 + .055 * (energy - .5)),
     y: region.y + region.h * (.50 + .055 * (onsets - .5)) };
@@ -71,7 +72,7 @@ function prepareEqualVoice(scene) {
       + ' (' + error.message + ')'); }
   }
   return prepareSceneGeometry({ ...scene, paths, markHierarchy: false,
-    placement: { region, target, scale, equalVoice: true, bleed: .08 } });
+    placement: { region, target, scale, equalVoice: true, reach } });
 }
 
 export function prepareEnsembleScene(scene) {
