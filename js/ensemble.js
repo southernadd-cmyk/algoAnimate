@@ -268,7 +268,7 @@ export class LayeredArtwork {
         gentle, cycle, canDraw, { paper: false, opacity: 0.72,
           initialInkAge: entering && canDraw ? ENTRY_FIRST_STROKE_AGE : 0 });
     }
-    this.syncFocal(); // The new lead may have entered its active layer this frame.
+    // Apply a mid-frame lead handoff next frame so scores capture what was actually painted.
     if (this.entrySeconds >= ENTRY_DURATION_SECONDS) this.entryFinished = true;
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
   }
