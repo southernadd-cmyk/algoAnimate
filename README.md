@@ -8,6 +8,8 @@
 
 AlgoAnimate listens to music or sound and draws marker strokes progressively onto one shared canvas. Each of eight voices responds to a different audio feature: bass, mids, treble, loudness, brightness, spectral change, bass + onsets, or mids + treble. It is a live interpretation rather than an instrument-recognition system. The composition uses golden-ratio structures, but overlapping voices do **not** guarantee a single collision-free or mathematically unified layout.
 
+**Experimental ensemble hierarchy:** Orbital Studies currently holds a persistent lead role and seven supporting voices use smaller mark budgets and steer their shared golden-angle anchors away from a reserved focal area. This makes space for a dominant composition without muting any voice or changing the sound mappings. Long lines and native forms may still cross the protected region, so this is a compositional bias rather than masking or guaranteed separation. The leader does not change during musical peaks.
+
 ## Getting started
 
 1. Choose **Try demo sound**, **Audio file**, **Microphone**, or **Browser tab** (where supported).
