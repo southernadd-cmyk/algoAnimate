@@ -354,7 +354,7 @@ player.addEventListener('error', () => {
 
 function settings(voice, seed, style) {
   return { ...ensembleSettings(voice.route, seed, $('orientation').value, 'marker', +$('density').value,
-    style, voice.sound.profile, goldenRotationPhase(artwork.layoutTime)), sharedAnchor: $('sharedAnchor').checked };
+    style, voice.sound.profile, goldenRotationPhase(artwork.layoutTime) + .51 * artwork.regionAccentTurns), sharedAnchor: $('sharedAnchor').checked };
 }
 async function generateAll(immediate = false) {
   const request = ++layoutGeneration; preparing = true;
