@@ -113,7 +113,8 @@ export function prepareEnsembleScene(scene) {
       const length = Math.hypot(dx, dy) || 1;
       const direction = hash(String(scene.seed ?? '') + '|growth-edge-bend') % 2 ? 1 : -1;
       const bend = direction * Math.min(length * GOLDEN_LOW * GOLDEN_LOW, Math.min(scene.width, scene.height) * .055);
-      const within = (value, limit) => Math.max(2, Math.min(limit - 2, value));
+      const safeInset = Math.max(2, Math.min(scene.width, scene.height) * .005);
+      const within = (value, limit) => Math.max(safeInset, Math.min(limit - safeInset, value));
       const c1 = {
         x: within(entrance.x + dx * GOLDEN_LOW + (-dy / length) * bend, scene.width),
         y: within(entrance.y + dy * GOLDEN_LOW + (dx / length) * bend, scene.height)
@@ -125,6 +126,11 @@ export function prepareEnsembleScene(scene) {
       d = ['M', entrance.x, entrance.y, 'C', c1.x, c1.y, c2.x, c2.y,
         start.x, start.y, ...commands.slice(3)].join(' ');
     }
+    // Native pen curves are preserved at sub-pixel precision. Eliminating
+    // surplus floating-point digits matters for three-minute vector scores:
+    // it reduces bytes without deleting strokes or increasing capture limits.
+    d = d.split(' ').map(token => Number.isFinite(+token) && token !== ''
+      ? String(+Number(token).toFixed(3)) : token).join(' ');
     return { ...path, d, transform: undefined, geometry: undefined };
   });
   return prepareSceneGeometry({ ...scene, paths,
