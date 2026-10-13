@@ -16,6 +16,28 @@ Tissue & Graphite V6 is the deployed default material (since v0.20). The **Drawi
 
 PNG and WebM record the tissue image. Print PNG re-renders the current sheet with a higher quality setting; SVG intentionally retains editable vector geometry, as in ALGO/ART. New tissue scores record their material seed and palette and replay as tissue; Marker scores replay as markers. Older marker scores remain supported. The V6 integration is already deployed; new coherence safeguards are being validated separately.
 
+### Composition-layer cache — opt-in experiment
+
+The **Isolate composition layers (experimental)** checkbox appears beneath
+**Drawing material** when Tissue & Graphite is selected. It is **off by default**.
+It separates each animated composition into its own seeded V6 paint job, caches
+its rendered pixels in a worker, and composites cached layers onto cream paper.
+Only one changing composition is regenerated per worker request; completed or
+temporarily unchanged compositions retain their previous bitmap. Sound-driven
+stroke windows, pressure, fade-out and layer retirement still determine which
+layers remain on the sheet.
+
+This is a **visual comparison**, not a replacement for V6's authoritative
+whole-sheet renderer. Pigment is extracted from V6's opaque cream paper using
+a colour-difference approximation. Overlaps, pale tissue, performance and
+fine-grained in-progress strokes therefore differ from standard V6. One worker
+job updates one composition, so each voice can update more slowly when all
+eight are active. WebM records the visible experimental composite; **print
+PNG and replayable score playback still use the standard whole-sheet V6
+renderer**, so they will not perfectly match experimental live frames.
+The source material files remain untouched and pinned. No image cache is
+stored in scores or persisted across browser reloads.
+
 ## Getting started
 
 1. Choose **Try demo sound**, **Audio file**, **Microphone**, or **Browser tab** (where supported).
