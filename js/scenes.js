@@ -197,6 +197,14 @@ export class AnimatedArtwork {
         layer.pressure[i] = layer.preview ? 1 : 1 + strength * (features.level * 0.2
           + features.bass * large * 0.24 + features.treble * (1 - large) * 0.12);
       }
+      // The Tissue & Graphite app composites material on another thread.
+      // Still latch the original audio pressure and update draw statistics.
+      if (this.materialOnly) {
+        this.stats.visiblePaths++;
+        this.stats.inkLength += (to - from) * entry.geometry.length;
+        if (!layer.preview && to > 0 && to < 1) this.stats.penTips++;
+        continue;
+      }
       ctx.strokeStyle = entry.stroke;
       const influence = influences?.[i] || 0;
       ctx.lineWidth = entry.width * (1 - SUPPORT_WIDTH_REDUCTION * influence) * layer.pressure[i];
