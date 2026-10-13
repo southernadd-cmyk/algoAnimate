@@ -28,7 +28,8 @@ export function unpackFeatures(packet) {
 // ellipse. Moving support fades never create another geometry record. Worker timing, random
 // ink kits and muted layers are preserved, without storing audio or canvas pixels.
 export class ScoreCapture {
-  constructor(started, source = '') {
+  constructor(started, source = '', materialIdentity = null) {
+    this.materialIdentity = materialIdentity;
     this.started = started; this.bytes = 0;
     this.sceneIds = new WeakMap(); this.layerIds = new WeakMap(); this.paperIds = new WeakMap();
     this.openLayers = new Map();
@@ -120,7 +121,9 @@ export class ScoreCapture {
       }
       if (colours.length >= 12) break;
     }
-    const materialFrame = [artwork.drawnSeed || 'SOUND-READY', colours];
+    const materialFrame = this.materialIdentity
+      ? [this.materialIdentity.seed, this.materialIdentity.palette]
+      : [artwork.drawnSeed || 'SOUND-READY', colours];
     this.data.materialFrames.push(materialFrame);
     this.bytes += JSON.stringify(materialFrame).length;
     return time < 180000 && this.data.frames.length < 5500 && this.bytes < MAX_SCORE_BYTES * 0.8;
