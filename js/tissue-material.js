@@ -13,6 +13,7 @@ export class TissueMaterial {
     this.counter = 0;
     this.pending = false;
     this.frame = null;
+    this.held = false;
     this.lastRequest = 0;
     this.exports = new Map();
     this.worker = typeof Worker === 'undefined' ? null
@@ -28,7 +29,7 @@ export class TissueMaterial {
   }
   reset() {
     this.epoch++;
-    this.pending = false; this.lastRequest = 0;
+    this.pending = false; this.held = false; this.lastRequest = 0;
     this.frame?.close(); this.frame = null;
     // A worker already rendering may still send an old epoch; discard it.
   }
@@ -42,6 +43,7 @@ export class TissueMaterial {
     }
     if (epoch !== this.epoch) { bitmap?.close(); return; }
     this.pending = false;
+    if (this.held) { bitmap?.close(); return; }
     if (error) { this.onError(new Error(error)); return; }
     this.frame?.close();
     this.frame = bitmap;
@@ -82,6 +84,10 @@ export class TissueMaterial {
   live(artwork, gentle, now = performance.now()) {
     const paper = artwork.paperScene;
     if (!paper) return;
+    // Pausing sound freezes the last painted frame, not a future material
+    // buffer which happened to finish after the pen clock stopped.
+    this.held = !artwork.flowing;
+    if (this.held) { this.present(paper); return; }
     // Path-window extraction can be expensive for eight simultaneous voices.
     // Do it only when the material worker can accept the next frame, rather
     // than needlessly reconstructing every vector at the 30 FPS UI cadence.
