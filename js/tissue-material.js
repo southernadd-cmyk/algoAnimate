@@ -1,0 +1,96 @@
+import { captureSheet } from './export.js';
+
+// The costly three-buffer ALGO/ART material process never runs on the animation
+// thread. Keep one request in flight and discard obsolete frames on completion.
+// All bitmap frames are made from progressing, sound-driven vector geometry;
+// they are not a filter applied to finished marker pictures.
+export class TissueMaterial {
+  constructor(canvas, onError = () => {}) {
+    this.canvas = canvas;
+    this.context = canvas.getContext('2d', { alpha: false });
+    this.onError = onError;
+    this.epoch = 0;
+    this.counter = 0;
+    this.pending = false;
+    this.frame = null;
+    this.lastRequest = 0;
+    this.exports = new Map();
+    this.worker = typeof Worker === 'undefined' ? null
+      : new Worker(new URL('./tissue-worker.js', import.meta.url));
+    if (!this.worker) onError(new Error('Tissue & Graphite needs browser worker support.'));
+    else {
+      this.worker.onmessage = ({ data }) => this.receive(data);
+      this.worker.onerror = () => {
+        this.pending = false;
+        this.onError(new Error('The Tissue & Graphite renderer stopped.'));
+      };
+    }
+  }
+  reset() {
+    this.epoch++;
+    this.pending = false; this.lastRequest = 0;
+    this.frame?.close(); this.frame = null;
+    // A worker already rendering may still send an old epoch; discard it.
+  }
+  receive({ id, epoch, bitmap, error }) {
+    if (this.exports.has(id)) {
+      const { resolve, reject } = this.exports.get(id);
+      this.exports.delete(id);
+      if (error) reject(new Error(error));
+      else resolve(bitmap);
+      return;
+    }
+    if (epoch !== this.epoch) { bitmap?.close(); return; }
+    this.pending = false;
+    if (error) { this.onError(new Error(error)); return; }
+    this.frame?.close();
+    this.frame = bitmap;
+  }
+  palette(artwork) {
+    const colours = [];
+    for (const voice of artwork.voices) {
+      if (!artwork.enabled(voice)) continue;
+      const scene = voice.art.activeLayer?.scene || voice.art.current;
+      for (const color of scene?.style?.colors || []) {
+        if (!colours.includes(color)) colours.push(color);
+        if (colours.length >= 12) return colours;
+      }
+    }
+    return colours.length ? colours : ['#748e83', '#bc803f', '#626f61'];
+  }
+  paint(sheet, seed, palette, now = performance.now()) {
+    // Present the last completed tissue frame while rendering the next one.
+    this.context.save();
+    this.context.globalCompositeOperation = 'source-over';
+    this.context.globalAlpha = 1;
+    this.context.fillStyle = '#f5f0e6';
+    this.context.fillRect(0, 0, sheet.width, sheet.height);
+    if (this.frame) this.context.drawImage(this.frame, 0, 0, sheet.width, sheet.height);
+    this.context.restore();
+    if (!this.worker || this.pending || now - this.lastRequest < 110) return;
+    // No visible source geometry means real blank paper, not a fully painted
+    // composition shown ahead of its audio-controlled drawing schedule.
+    if (!sheet.paths.length) { this.frame?.close(); this.frame = null; return; }
+    this.pending = true; this.lastRequest = now;
+    this.worker.postMessage({
+      id: ++this.counter, epoch: this.epoch, sheet, seed, palette, quality: 0.39
+    });
+  }
+  live(artwork, gentle, now = performance.now()) {
+    const sheet = captureSheet(artwork, gentle);
+    this.paint(sheet, artwork.drawnSeed || 'SOUND-READY', this.palette(artwork), now);
+  }
+  renderOnce(sheet, seed, palette, quality = 2.5) {
+    if (!this.worker) return Promise.reject(new Error('Material worker is unavailable.'));
+    const id = ++this.counter, epoch = this.epoch;
+    return new Promise((resolve, reject) => {
+      this.exports.set(id, { resolve, reject });
+      this.worker.postMessage({ id, epoch, sheet, seed, palette, quality });
+    });
+  }
+  dispose() {
+    this.reset(); this.worker?.terminate();
+    for (const item of this.exports.values()) item.reject(new Error('Material renderer closed.'));
+    this.exports.clear();
+  }
+}
