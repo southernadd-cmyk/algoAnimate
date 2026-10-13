@@ -14,29 +14,28 @@ AlgoAnimate listens to music or sound and progressively assembles translucent to
 
 Tissue & Graphite V6 is the deployed default material (since v0.20). The **Drawing material** selector also restores the original Marker look for live compositions. ALGO/ART V8 vectors, eight equal voices, golden territories, sound-driven stroke windows and pen-pressure timings remain the structural input. Three unmodified upstream material files live in `materials/tissue-v6/`; a separate worker paints the visible geometry at a bounded preview resolution, keeping browser audio and the interface responsive. Rendering may update more slowly than the 30 FPS animation clock on low-powered devices; a fresh canvas initially remains blank while its first tissue buffer is computed.
 
-PNG and WebM record the tissue image. Print PNG re-renders the current sheet with a higher quality setting; SVG intentionally retains editable vector geometry, as in ALGO/ART. New tissue scores record their material seed and palette and replay as tissue; Marker scores replay as markers. Older marker scores remain supported. The V6 integration is already deployed; new coherence safeguards are being validated separately.
+PNG and WebM record the tissue image. Print PNG re-renders the current sheet with a higher quality setting; SVG intentionally retains editable vector geometry, as in ALGO/ART. New tissue scores record their material seed and palette and replay as tissue; Marker scores replay as markers. Older marker scores remain supported. The live Tissue & Graphite renderer now isolates and caches each composition so unrelated voices cannot repaint existing marks.
 
-### Composition-layer cache — opt-in experiment
+### Independent composition-layer rendering (default)
 
-The **Isolate composition layers (experimental)** checkbox appears beneath
-**Drawing material** when Tissue & Graphite is selected. It is **off by default**.
-It separates each animated composition into its own seeded V6 paint job, caches
-its rendered pixels in a worker, and composites cached layers onto cream paper.
-Only one changing composition is regenerated per worker request; completed or
-temporarily unchanged compositions retain their previous bitmap. Sound-driven
-stroke windows, pressure, fade-out and layer retirement still determine which
-layers remain on the sheet.
+Tissue & Graphite uses independently seeded composition layers as its standard
+live rendering method. Each animated composition is painted in its own V6 worker
+job, cached, and composited onto the standard cream paper. Only one changing
+composition is regenerated per worker request; completed or temporarily
+unchanged compositions retain their previous bitmap. Sound-driven stroke windows,
+pressure, fade-out and layer retirement still determine what remains on the sheet.
+There is no experimental checkbox or separate rendering mode to enable.
 
-This is a **visual comparison**, not a replacement for V6's authoritative
-whole-sheet renderer. Pigment is extracted from V6's opaque cream paper using
-a colour-difference approximation. Overlaps, pale tissue, performance and
-fine-grained in-progress strokes therefore differ from standard V6. One worker
-job updates one composition, so each voice can update more slowly when all
-eight are active. WebM records the visible experimental composite; **print
-PNG and replayable score playback still use the standard whole-sheet V6
-renderer**, so they will not perfectly match experimental live frames.
-The source material files remain untouched and pinned. No image cache is
-stored in scores or persisted across browser reloads.
+V6 makes opaque paper images, so extracting translucent pigment from each layer
+uses a colour-difference approximation. Consequently overlaps, pale tissue and
+fine-grained in-progress strokes can differ from a one-pass whole-sheet V6 render.
+Each worker job updates one composition; when all eight voices are active,
+individual layers may update more slowly. WebM and regular PNG capture the
+visible composition-layer result. **3× print PNG and replayable score playback
+still use the whole-sheet V6 renderer**, so they may not match the live image
+exactly. SVG remains editable vector geometry. The upstream V6 material source
+files remain untouched and pinned, and no bitmap cache persists across reloads
+or is stored in scores.
 
 ## Getting started
 
