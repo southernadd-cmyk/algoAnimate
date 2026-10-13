@@ -30,14 +30,8 @@ const tissue = new TissueMaterial(art, error => {
   notice.hidden = false; notice.classList.add('error');
 });
 const tissueReplay = () => Boolean(replay?.score.material === 'tissue-graphite-v6');
-function replayPalette() {
-  const colors = [];
-  for (const scene of replay.scenes.values()) for (const path of scene.paths) {
-    if (!colors.includes(path.stroke)) colors.push(path.stroke);
-    if (colors.length === 12) return colors;
-  }
-  return colors;
-}
+function replayPalette() { return replay.materialFrame[1]; }
+function replaySeed() { return replay.materialFrame[0]; }
 const styleDeck = new StyleDeck();
 const tracker = new FeatureTracker();
 const bandMeters = new BandMeters();
@@ -176,7 +170,7 @@ function beginScoreReplay() {
     replay = new ScoreReplay(scoreData); tissue.reset(); drawingPaused = false;
     document.body.classList.add('replaying'); $('scoreSeek').max = scoreData.duration;
     const firstSheet = replay.sheet(); setSheetSize(firstSheet);
-    if (tissueReplay()) tissue.paint(firstSheet, 'SCORE-' + replay.index, replayPalette());
+    if (tissueReplay()) tissue.paint(firstSheet, replaySeed(), replayPalette());
     else paintSheet(artwork.context, firstSheet);
     previousFrame = 0;
     syncControls(); message('Replaying the recorded score. No audio is needed. Seek to any frame and export it.');
@@ -533,7 +527,7 @@ $('snapshot').addEventListener('click', async () => {
       if (!replay || tissueReplay()) {
         // Full V6 pigment/height/graphite re-render, not a 3x upscaled marker.
         const bitmap = await tissue.renderOnce(sheet,
-          replay ? 'SCORE-' + replay.index : artwork.drawnSeed, replay ? replayPalette() : tissue.palette(artwork));
+          replay ? replaySeed() : artwork.drawnSeed, replay ? replayPalette() : tissue.palette(artwork));
         try { printCtx.drawImage(bitmap, 0, 0, canvas.width, canvas.height); }
         finally { bitmap.close(); }
       } else paintSheet(printCtx, sheet, 3);
@@ -640,7 +634,7 @@ function frame(now) {
   previousFrame = now; clock += dt;
   if (replay) {
     replay.advance(dt); const sheet = replay.sheet(); setSheetSize(sheet);
-    if (tissueReplay()) tissue.paint(sheet, 'SCORE-' + replay.index, replayPalette(), now);
+    if (tissueReplay()) tissue.paint(sheet, replaySeed(), replayPalette(), now);
     else paintSheet(artwork.context, sheet);
     features = replay.features;
     bandMeters.update(features.bandRms, dt, features.active, true);
