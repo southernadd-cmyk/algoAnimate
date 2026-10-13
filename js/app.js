@@ -13,6 +13,7 @@ import { ScoreCapture, ScoreReplay, parseScore, MAX_SCORE_BYTES } from './scores
 import { ScreenAwake, shortcut } from './performance.js';
 import { ListeningOverlay } from './listening.js';
 import { pngWithDpi } from './png.js';
+import { TissueMaterial } from './tissue-material.js';
 
 const $ = id => document.getElementById(id);
 const art = $('art'), waveform = $('waveform'), player = $('filePlayer'), demoPlayer = $('demoPlayer');
@@ -20,6 +21,23 @@ const waveContext = waveform.getContext('2d');
 const recordingCanvas = document.createElement('canvas');
 const recordingContext = recordingCanvas.getContext('2d', { alpha: false });
 const artwork = new LayeredArtwork(art), builder = new SceneBuilder();
+// All eight engines still generate, schedule and respond to sound normally;
+// their underlying marker geometry is used only as material structure.
+for (const voice of artwork.voices) voice.art.materialOnly = true;
+const tissue = new TissueMaterial(art, error => {
+  const notice = document.getElementById('message');
+  notice.textContent = 'Tissue & Graphite rendering failed: ' + error.message;
+  notice.hidden = false; notice.classList.add('error');
+});
+const tissueReplay = () => Boolean(replay?.score.material === 'tissue-graphite-v6');
+function replayPalette() {
+  const colors = [];
+  for (const scene of replay.scenes.values()) for (const path of scene.paths) {
+    if (!colors.includes(path.stroke)) colors.push(path.stroke);
+    if (colors.length === 12) return colors;
+  }
+  return colors;
+}
 const styleDeck = new StyleDeck();
 const tracker = new FeatureTracker();
 const bandMeters = new BandMeters();
@@ -145,7 +163,7 @@ function setSheetSize(sheet) {
 }
 function leaveScoreReplay() {
   if (!replay) return;
-  replay = null; document.body.classList.remove('replaying');
+  replay = null; tissue.reset(); document.body.classList.remove('replaying');
   if (artwork.paperScene) setSheetSize(artwork.paperScene);
   features = SILENCE; bandMeters.reset(); changeMeter.reset(); previousFrame = 0;
   syncControls();
@@ -155,9 +173,12 @@ function beginScoreReplay() {
   try {
     if (!scoreData.validated) scoreData = parseScore(JSON.stringify(scoreData));
     audio.stop(); artwork.resetSound(); soundGate.reset();
-    replay = new ScoreReplay(scoreData); drawingPaused = false;
+    replay = new ScoreReplay(scoreData); tissue.reset(); drawingPaused = false;
     document.body.classList.add('replaying'); $('scoreSeek').max = scoreData.duration;
-    setSheetSize(replay.sheet()); paintSheet(artwork.context, replay.sheet()); previousFrame = 0;
+    const firstSheet = replay.sheet(); setSheetSize(firstSheet);
+    if (tissueReplay()) tissue.paint(firstSheet, 'SCORE-' + replay.index, replayPalette());
+    else paintSheet(artwork.context, firstSheet);
+    previousFrame = 0;
     syncControls(); message('Replaying the recorded score. No audio is needed. Seek to any frame and export it.');
   } catch (error) { message('Score could not be replayed: ' + error.message, true); }
 }
@@ -178,7 +199,7 @@ $('scoreInput').addEventListener('change', async event => {
 $('replayScore').addEventListener('click', beginScoreReplay);
 $('leaveReplay').addEventListener('click', leaveScoreReplay);
 $('scoreRestart').addEventListener('click', () => { if (replay) { replay.seek(0); replay.paused = false; syncControls(); } });
-$('scoreSeek').addEventListener('input', () => { if (replay) { replay.seek(+$('scoreSeek').value); replay.paused = true; } });
+$('scoreSeek').addEventListener('input', () => { if (replay) { replay.seek(+$('scoreSeek').value); replay.paused = true; tissue.reset(); } });
 $('scorePause').addEventListener('click', () => { if (replay) { if (replay.time >= replay.score.duration) replay.seek(0); replay.paused = !replay.paused; syncControls(); } });
 $('pauseDrawing').addEventListener('click', () => {
   if (replay) { $('scorePause').click(); return; }
@@ -395,7 +416,7 @@ async function generateVoice(voice, seed) {
   try {
     const scene = await builder.build(settings(voice, seed, style));
     if (request !== voice.generation || layout !== layoutGeneration || !voice.flowing || !artwork.enabled(voice)) return;
-    if (!scene.paths.length) throw new Error(voice.route.name + ' did not produce any marker paths.');
+    if (!scene.paths.length) throw new Error(voice.route.name + ' did not produce any vector paths.');
     artwork.setVoiceScene(voice, scene, false, voice.firstSoundSeed);
     voice.lastCompositionProfile = snapshot;
     voice.firstSoundSeed = false;
@@ -497,7 +518,7 @@ function downloadBlob(blob, filename) {
   link.href = url; link.download = filename; link.click();
   setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
-$('snapshot').addEventListener('click', () => {
+$('snapshot').addEventListener('click', async () => {
   if (!artwork.current || preparing) return;
   try {
     const format = $('exportFormat').value;
@@ -508,7 +529,14 @@ $('snapshot').addEventListener('click', () => {
     const canvas = format === 'print' ? document.createElement('canvas') : art;
     if (format === 'print') {
       canvas.width = sheet.width * 3; canvas.height = sheet.height * 3;
-      paintSheet(canvas.getContext('2d', { alpha: false }), sheet, 3);
+      const printCtx = canvas.getContext('2d', { alpha: false });
+      if (!replay || tissueReplay()) {
+        // Full V6 pigment/height/graphite re-render, not a 3x upscaled marker.
+        const bitmap = await tissue.renderOnce(sheet,
+          replay ? 'SCORE-' + replay.index : artwork.drawnSeed, replay ? replayPalette() : tissue.palette(artwork));
+        try { printCtx.drawImage(bitmap, 0, 0, canvas.width, canvas.height); }
+        finally { bitmap.close(); }
+      } else paintSheet(printCtx, sheet, 3);
     }
     canvas.toBlob(async blob => {
       try {
@@ -523,7 +551,7 @@ $('snapshot').addEventListener('click', () => {
 });
 $('clearCanvas').addEventListener('click', () => {
   if (replay) { message('Return to live drawing to clear the canvas.'); return; }
-  artwork.clearInk();
+  artwork.clearInk(); tissue.reset();
   // A one-second hold made each sound restart look like a blank page.
   // Clear immediately, then start the first new visible stroke on the next frame.
   clearHoldUntil = performance.now() + 24;
@@ -612,7 +640,9 @@ function frame(now) {
   previousFrame = now; clock += dt;
   if (replay) {
     replay.advance(dt); const sheet = replay.sheet(); setSheetSize(sheet);
-    paintSheet(artwork.context, sheet); features = replay.features;
+    if (tissueReplay()) tissue.paint(sheet, 'SCORE-' + replay.index, replayPalette(), now);
+    else paintSheet(artwork.context, sheet);
+    features = replay.features;
     bandMeters.update(features.bandRms, dt, features.active, true);
     changeMeter.sample(features.raw.flux, features.active, true);
     if (features.beat) onsetUntil = now + 150;
@@ -645,6 +675,7 @@ function frame(now) {
     }
   }
   artwork.draw(dt, +$('motion').value / 100, $('gentle').checked, cycle);
+  if (artwork.paperScene) tissue.live(artwork, $('gentle').checked, now);
   drawWaveform(data?.wave);
   if (recorder.active) { paintRecording(); recorder.captureFrame(); }
   if (scoreCapture && !scoreCapture.capture(now, artwork, features, $('gentle').checked)) finishScore();
@@ -653,16 +684,17 @@ function frame(now) {
   if (now - uiTime > 100) { updateUI(now); uiTime = now; }
 }
 
-window.addEventListener('pagehide', () => { if (recorder.active) recorder.stop(); awake.dispose(); clearTimeout(performanceTimer); frameClock.stop(); audio.stop(); });
+window.addEventListener('pagehide', () => { if (recorder.active) recorder.stop(); awake.dispose(); tissue.dispose(); clearTimeout(performanceTimer); frameClock.stop(); audio.stop(); });
 
 // Small read-only diagnostics surface for smoke tests and bug reports.
 window.AlgoAnimate = Object.freeze({
-  version: '0.18',
+  version: '0.20',
   diagnostics: () => ({
     source: audio.kind, paused: drawingPaused, performance: performanceMode, wakeLock: awake.status,
     replay: replay ? { frame: replay.index, time: replay.time, paused: replay.paused, duration: replay.score.duration } : null,
     score: scoreData ? { frames: scoreData.frames.length, scenes: scoreData.scenes.length, duration: scoreData.duration } : null,
     audio: audio.diagnostics(), seed: artwork.drawnSeed, engine: 'ensemble',
+    material: { name: 'Tissue & Graphite', revision: 6, worker: Boolean(tissue.worker), frameReady: Boolean(tissue.frame) },
     demo: audio.kind === 'demo' ? { title: demoPlaylist.track.title, index: demoPlaylist.index,
       tracks: DEMO_TRACKS.length, paused: demoPlayer.paused, time: demoPlayer.currentTime } : null,
     engines: artwork.diagnostics(), compositions: artwork.sceneCount,
