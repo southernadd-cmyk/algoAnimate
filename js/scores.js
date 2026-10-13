@@ -88,7 +88,7 @@ export class ScoreCapture {
       this.packPressure(id); this.openLayers.delete(layer);
     }
   }
-  capture(now, artwork, features, gentle) {
+  capture(now, artwork, features, gentle, materialSeed = artwork.drawnSeed) {
     if (!artwork.ready || !artwork.paperScene) return true;
     const time = Math.min(180000, Math.max(0, Math.round(now - this.started)));
     let paper = this.paperIds.get(artwork.paperScene);
@@ -120,7 +120,7 @@ export class ScoreCapture {
       }
       if (colours.length >= 12) break;
     }
-    const materialFrame = [artwork.drawnSeed || 'SOUND-READY', colours];
+    const materialFrame = [materialSeed || 'SOUND-READY', colours];
     this.data.materialFrames.push(materialFrame);
     this.bytes += JSON.stringify(materialFrame).length;
     return time < 180000 && this.data.frames.length < 5500 && this.bytes < MAX_SCORE_BYTES * 0.8;
