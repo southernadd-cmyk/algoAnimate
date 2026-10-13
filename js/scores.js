@@ -28,14 +28,13 @@ export function unpackFeatures(packet) {
 // ellipse. Moving support fades never create another geometry record. Worker timing, random
 // ink kits and muted layers are preserved, without storing audio or canvas pixels.
 export class ScoreCapture {
-  constructor(started, source = '', materialIdentity = null, material = 'tissue-graphite-v6') {
-    this.materialIdentity = materialIdentity;
+  constructor(started, source = '') {
     this.started = started; this.bytes = 0;
     this.sceneIds = new WeakMap(); this.layerIds = new WeakMap(); this.paperIds = new WeakMap();
     this.openLayers = new Map();
     this.data = { format: SCORE_FORMAT, version: SCORE_FORMAT_VERSION, renderer: ALGOART_RENDERER_VERSION, source,
       featureKeys: keys, hierarchyLead: null, supportOpacityReduction: SUPPORT_OPACITY_REDUCTION,
-      material, materialFrames: [],
+      material: 'tissue-graphite-v6', materialFrames: [],
       scenes: [], layers: [], papers: [], frames: [], duration: 0 };
   }
   sceneId(scene) {
@@ -111,23 +110,19 @@ export class ScoreCapture {
     this.data.frames.push(frame); this.data.duration = time;
     // Material must use the SAME source palette/seed on replay, even as
     // styles change between sounds and generations of geometry.
-    if (this.data.material === 'tissue-graphite-v6') {
-      const colours = [];
-      for (const voice of artwork.voices) {
-        if (!artwork.enabled(voice)) continue;
-        const scene = voice.art.activeLayer?.scene || voice.art.current;
-        for (const colour of scene?.style?.colors || []) {
-          if (!colours.includes(colour)) colours.push(colour);
-          if (colours.length >= 12) break;
-        }
+    const colours = [];
+    for (const voice of artwork.voices) {
+      if (!artwork.enabled(voice)) continue;
+      const scene = voice.art.activeLayer?.scene || voice.art.current;
+      for (const colour of scene?.style?.colors || []) {
+        if (!colours.includes(colour)) colours.push(colour);
         if (colours.length >= 12) break;
       }
-      const materialFrame = this.materialIdentity
-        ? [this.materialIdentity.seed, this.materialIdentity.palette]
-        : [artwork.drawnSeed || 'SOUND-READY', colours];
-      this.data.materialFrames.push(materialFrame);
-      this.bytes += JSON.stringify(materialFrame).length;
+      if (colours.length >= 12) break;
     }
+    const materialFrame = [artwork.drawnSeed || 'SOUND-READY', colours];
+    this.data.materialFrames.push(materialFrame);
+    this.bytes += JSON.stringify(materialFrame).length;
     return time < 180000 && this.data.frames.length < 5500 && this.bytes < MAX_SCORE_BYTES * 0.8;
   }
   finish() {
