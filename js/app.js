@@ -609,12 +609,12 @@ function updateUI(now) {
     if (style && controls.styleToken !== style.token) {
       controls.styleToken = style.token;
       controls.row.dataset.pen = style.pen.id; controls.row.dataset.palette = style.palette.id;
-      controls.pen.textContent = style.pen.name; controls.palette.textContent = style.palette.name;
+      controls.pen.textContent = 'Tissue & graphite'; controls.palette.textContent = style.palette.name;
       controls.row.style.setProperty('--ink-color', style.colors[0]);
       controls.swatches.replaceChildren(...style.colors.map(color => {
         const swatch = document.createElement('i'); swatch.style.backgroundColor = color; return swatch;
       }));
-      // The sample is drawn by the same native marker engine as the artwork.
+      // Retained geometry preview (hidden in tissue mode): sound still shapes these paths.
       const context = controls.sample.getContext('2d'), A = window.AlgoArt;
       context.clearRect(0, 0, 240, 44);
       const random = A.makeR('PREVIEW-' + style.token);
