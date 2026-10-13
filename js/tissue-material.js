@@ -121,6 +121,11 @@ export class TissueMaterial {
     return colours.length ? colours : ['#748e83', '#bc803f', '#626f61'];
   }
   present(sheet, now = performance.now(), freeze = false) {
+    // Release the previous bitmap before the unchanged-frame fast path;
+    // otherwise the last blended bitmap can remain allocated indefinitely.
+    if (this.previousFrame && (freeze || !this.frame || now - this.receivedAt >= this.blendMs)) {
+      this.previousFrame.close(); this.previousFrame = null;
+    }
     const blending = this.previousFrame && this.frame && this.blendMs && !freeze
       && now - this.receivedAt < this.blendMs;
     // Don't repaint a million-pixel sheet for every idle animation tick.
