@@ -60,3 +60,35 @@ test('A cleared or replaced sheet discards late bitmap results', () => {
     painter.dispose();
   } finally { globalThis.Worker = before; }
 });
+
+
+test('V6 sheet identity stays fixed when independent voices change seed or palette', () => {
+  const previousWorker = globalThis.Worker;
+  globalThis.Worker = MockWorker;
+  try {
+    const painter = new TissueMaterial(makeCanvas());
+    const voices = Array.from({ length: 8 }, (_, i) => ({
+      art: {
+        current: {
+          style: { colors: ['#' + String(i + 1).repeat(6), '#aabbcc'] }
+        }
+      }
+    }));
+    const artwork = { voices, drawnSeed: 'FIRST-MIX' };
+    const first = painter.identityFor(artwork);
+    assert.equal(first.seed, 'FIRST-MIX');
+    // All eight voices get a representative first pigment before a voice
+    // contributes its second/third swatches.
+    assert.deepEqual(first.palette.slice(0, 8),
+      voices.map(voice => voice.art.current.style.colors[0]));
+    artwork.drawnSeed = 'SECOND-MIX';
+    voices[0].art.current.style.colors = ['#ffffff', '#000000'];
+    assert.strictEqual(painter.identityFor(artwork), first);
+    assert.equal(painter.seed(artwork), 'FIRST-MIX');
+    assert.deepEqual(painter.palette(artwork), first.palette);
+    painter.reset();
+    assert.equal(painter.seed(artwork), 'SECOND-MIX');
+    assert.equal(painter.palette(artwork)[0], '#ffffff');
+    painter.dispose();
+  } finally { globalThis.Worker = previousWorker; }
+});
