@@ -1,4 +1,4 @@
-import { captureSheet } from './export.js';
+import { captureSheet, layerStrokes } from './export.js';
 
 // The costly three-buffer ALGO/ART material process never runs on the animation
 // thread. Keep one request in flight and discard obsolete frames on completion.
@@ -16,6 +16,12 @@ export class TissueMaterial {
     this.held = false;
     this.lastRequest = 0;
     this.exports = new Map();
+    this.identity = null;
+    this.sheetSize = null;
+    this.layerIds = new WeakMap();
+    this.layerIdCounter = 0;
+    this.layerUpdates = new Map();
+    this.layerOrder = '';
     this.worker = typeof Worker === 'undefined' ? null
       : new Worker(new URL('./tissue-worker.js', import.meta.url));
     if (!this.worker) onError(new Error('Tissue & Graphite needs browser worker support.'));
@@ -31,6 +37,10 @@ export class TissueMaterial {
     this.epoch++;
     this.pending = false; this.held = false; this.lastRequest = 0;
     this.frame?.close(); this.frame = null;
+    this.identity = null; this.sheetSize = null;
+    this.layerIds = new WeakMap(); this.layerIdCounter = 0;
+    this.layerUpdates.clear(); this.layerOrder = '';
+    this.worker?.postMessage({ kind: 'clear-layers' });
     // A worker already rendering may still send an old epoch; discard it.
   }
   receive({ id, epoch, bitmap, error }) {
@@ -48,18 +58,35 @@ export class TissueMaterial {
     this.frame?.close();
     this.frame = bitmap;
   }
-  palette(artwork) {
-    const colours = [];
-    for (const voice of artwork.voices) {
-      if (!artwork.enabled(voice)) continue;
+  // A single V6 render applies one seed and pigment kit to the WHOLE sheet.
+  // Freeze that identity for a sheet's lifetime: another voice refreshing must
+  // not repaint finished marks with a different seed or pigment palette.
+  // We collect swatches round-robin so later voices are represented too.
+  identityFor(artwork) {
+    if (this.identity) return this.identity;
+    const palettes = artwork.voices.map(voice => {
       const scene = voice.art.activeLayer?.scene || voice.art.current;
-      for (const color of scene?.style?.colors || []) {
-        if (!colours.includes(color)) colours.push(color);
-        if (colours.length >= 12) return colours;
+      return scene?.style?.colors || [];
+    });
+    const colours = [];
+    for (let index = 0; colours.length < 12 && index < 12; index++) {
+      let found = false;
+      for (const palette of palettes) {
+        if (palette[index] === undefined) continue;
+        found = true;
+        if (!colours.includes(palette[index])) colours.push(palette[index]);
+        if (colours.length >= 12) break;
       }
+      if (!found) break;
     }
-    return colours.length ? colours : ['#748e83', '#bc803f', '#626f61'];
+    this.identity = {
+      seed: artwork.drawnSeed || 'SOUND-READY',
+      palette: colours.length ? colours : ['#748e83', '#bc803f', '#626f61']
+    };
+    return this.identity;
   }
+  seed(artwork) { return this.identityFor(artwork).seed; }
+  palette(artwork) { return this.identityFor(artwork).palette; }
   present(sheet) {
     this.context.save();
     this.context.globalCompositeOperation = 'source-over';
@@ -84,6 +111,9 @@ export class TissueMaterial {
   live(artwork, gentle, now = performance.now()) {
     const paper = artwork.paperScene;
     if (!paper) return;
+    const size = paper.width + 'x' + paper.height;
+    if (this.sheetSize && this.sheetSize !== size) this.reset();
+    this.sheetSize = size;
     // Pausing sound freezes the last painted frame, not a future material
     // buffer which happened to finish after the pen clock stopped.
     this.held = !artwork.flowing;
@@ -96,7 +126,69 @@ export class TissueMaterial {
       return;
     }
     const sheet = captureSheet(artwork, gentle);
-    this.paint(sheet, artwork.drawnSeed || 'SOUND-READY', this.palette(artwork), now);
+    this.paint(sheet, this.seed(artwork), this.palette(artwork), now);
+  }
+  layerId(layer) {
+    if (!this.layerIds.has(layer)) this.layerIds.set(layer, ++this.layerIdCounter);
+    return this.layerIds.get(layer);
+  }
+  // Experimental mode is opt-in. One composition is repainted per worker job;
+  // every OTHER composition reuses a cached transparent bitmap. Layers with
+  // advancing ink windows must eventually update again, even after age 1:
+  // those paths recede under the original V8 ink-memory behaviour.
+  liveLayered(artwork, gentle, now = performance.now()) {
+    const paper = artwork.paperScene;
+    if (!paper) return;
+    const size = paper.width + 'x' + paper.height;
+    if (this.sheetSize && this.sheetSize !== size) this.reset();
+    this.sheetSize = size;
+    this.held = !artwork.flowing;
+    if (this.held || !this.worker || this.pending || now - this.lastRequest < 110) {
+      this.present(paper);
+      return;
+    }
+    const layers = [];
+    const candidates = [];
+    for (const voice of artwork.voices) {
+      if (!artwork.enabled(voice)) continue;
+      for (const layer of voice.art.layers) {
+        const id = this.layerId(layer);
+        layers.push({ id, opacity: 0.85 });
+        const last = this.layerUpdates.get(id);
+        if (!last || Math.abs(layer.age - last.age) >= 0.025) {
+          candidates.push({ id, layer, voice, last, age: layer.age });
+        }
+      }
+    }
+    const inUse = new Set(layers.map(layer => layer.id));
+    for (const id of this.layerUpdates.keys()) if (!inUse.has(id)) this.layerUpdates.delete(id);
+    const order = layers.map(layer => layer.id).join(',');
+    candidates.sort((a, b) => (a.last?.time ?? -Infinity) - (b.last?.time ?? -Infinity));
+    const choice = candidates[0];
+    if (!choice && order === this.layerOrder) { this.present(paper); return; }
+    let update = null;
+    if (choice) {
+      const { id, layer, voice } = choice;
+      // Keep original V8 easing, pressure and stroke windows, but scope
+      // V6's seeded randomness to this immutable composition alone.
+      const paths = layerStrokes(layer, gentle, 0.72,
+        layer.scene.inkMemory ?? 0.7,
+        voice === artwork.leadVoice ? null : artwork.effectiveFocal);
+      update = {
+        id, seed: layer.scene.seed || 'SOUND-READY',
+        palette: (layer.scene.style?.colors || []).slice(0, 12),
+        paths
+      };
+      this.layerUpdates.set(id, { age: choice.age, time: now });
+    }
+    this.layerOrder = order;
+    this.present(paper);
+    this.pending = true; this.lastRequest = now;
+    this.worker.postMessage({
+      kind: 'layered', id: ++this.counter, epoch: this.epoch, quality: 0.39,
+      sheet: { width: paper.width, height: paper.height },
+      layers, update
+    });
   }
   renderOnce(sheet, seed, palette, quality = 2.5) {
     if (!this.worker) return Promise.reject(new Error('Material worker is unavailable.'));
