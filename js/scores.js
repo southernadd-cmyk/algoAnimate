@@ -34,6 +34,7 @@ export class ScoreCapture {
     this.openLayers = new Map();
     this.data = { format: SCORE_FORMAT, version: SCORE_FORMAT_VERSION, renderer: ALGOART_RENDERER_VERSION, source,
       featureKeys: keys, hierarchyLead: null, supportOpacityReduction: SUPPORT_OPACITY_REDUCTION,
+      material: 'tissue-graphite-v6',
       scenes: [], layers: [], papers: [], frames: [], duration: 0 };
   }
   sceneId(scene) {
@@ -136,6 +137,7 @@ export function parseScore(text) {
   if (typeof text !== 'string' || text.length > MAX_SCORE_BYTES) fail();
   const score = JSON.parse(text);
   if (score?.format !== SCORE_FORMAT || ![1, 2, SCORE_FORMAT_VERSION].includes(score.version) || !Number.isInteger(score.renderer) || score.renderer < 1 || score.renderer > 1000) fail();
+  if (score.material !== undefined && !['marker', 'tissue-graphite-v6'].includes(score.material)) fail();
   if (score.version >= 2 && (!Number.isInteger(score.hierarchyLead) || score.hierarchyLead < 0 || score.hierarchyLead >= 8)) fail();
   array(score.frames, 5500); array(score.scenes, 5000); array(score.layers, 10000); array(score.papers, 200);
   if (!score.frames.length || !score.papers.length) fail();
