@@ -60,7 +60,7 @@ jobs:
         run: |
           mkdir -p dist
           cp index.html favicon.svg .nojekyll dist/
-          cp -R css js fonts vendor media dist/
+          cp -R css js fonts vendor media materials dist/
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
