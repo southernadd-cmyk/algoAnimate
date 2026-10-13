@@ -19,12 +19,12 @@ PNG and WebM record the tissue image. Print PNG re-renders the current sheet wit
 ## Getting started
 
 1. Choose **Try demo sound**, **Audio file**, **Microphone**, or **Browser tab** (where supported).
-2. Watch the drawing develop. Adjust density, sensitivity, speed, smoothing, colour mood and page orientation. Use **Solo** or **Mute** on individual voices to explore their contribution.
+2. Watch the drawing develop. Adjust density, sensitivity, speed, smoothing, colour mood and page orientation. Gentle motion is ON by default and Eight golden territories is OFF by default; both remain configurable. Use **Solo** or **Mute** on individual voices to explore their contribution.
 3. Select **Record** to capture the artwork with audio, then **Stop recording** and **Download video**. Recordings stop automatically after three minutes.
 4. Use **Save frame** for PNG, 3× print PNG or SVG. Use **Save score** to keep a replayable vector timeline; **Load score** and **Replay** work without the original sound.
 5. Choose **Performance** for distraction-free projection. Space pauses drawing, R toggles recording and C clears the sheet.
 
-The three CC0 demo tracks are by HoliznaCC0; see [demo credits](media/demo/README.md). Sound files and recordings remain on your device.
+The demo offers Lo-fi, Drum & bass, Jazz, Classical and Synthwave, with Next track and Next genre controls. On reaching the end of a genre, playback continues into the next genre and wraps after the last. All tracks are CC0; see [demo credits and source licences](media/demo/README.md). Music plays from the site without third-party streaming at runtime, and recordings remain on your device.
 
 ## Browser support and limitations
 

@@ -65,13 +65,14 @@ async function resumeDemo() {
 try {
   await page.goto(`http://127.0.0.1:${server.address().port}/`);
   await page.waitForFunction(() => window.AlgoAnimate?.diagnostics().paths > 0);
-  assert.equal(await page.locator('#sharedAnchor').isChecked(),true);
+  assert.equal(await page.locator('#sharedAnchor').isChecked(), false);
+  assert.equal(await page.locator('#gentle').isChecked(), true);
   await page.locator('#tuningDetails').evaluate(element=>{element.open=true;});
   const anchoredCount=(await state()).compositions;
-  await page.uncheck('#sharedAnchor');
+  await page.check('#sharedAnchor');
   await page.waitForFunction(count=>window.AlgoAnimate.diagnostics().compositions>count&&!window.AlgoAnimate.diagnostics().building,anchoredCount);
   const freeCount=(await state()).compositions;
-  await page.check('#sharedAnchor');
+  await page.uncheck('#sharedAnchor');
   await page.waitForFunction(count=>window.AlgoAnimate.diagnostics().compositions>count&&!window.AlgoAnimate.diagnostics().building,freeCount);
   await page.locator('#tuningDetails').evaluate(element=>{element.open=false;});
   assert.equal(await page.title(), await page.locator('meta[property="og:title"]').getAttribute('content'));
@@ -149,7 +150,21 @@ try {
   await musicReady('Tokyo Sunset');
   await page.waitForTimeout(1200);
   await page.click('#nextDemo');
+  await musicReady('Final Hour');
+  assert.equal((await state()).demo.genre, 'Drum & bass', 'Next track advances to next genre after last lo-fi');
+  await page.click('#nextGenre');
+  await musicReady('Public Domain Jazz');
+  assert.equal((await state()).demo.genre, 'Jazz');
+  await page.click('#nextGenre');
+  await musicReady('Aftermath');
+  assert.equal((await state()).demo.genre, 'Classical');
+  await page.click('#nextGenre');
+  await musicReady('Synthwave Type');
+  assert.equal((await state()).demo.genre, 'Synthwave');
+  await page.click('#nextGenre');
   await musicReady('Bubbles');
+  assert.equal((await state()).demo.genre, 'Lo-fi', 'Genre wraps to the first');
+  assert.equal((await state()).recording, true, 'Genre changes preserve live recording');
   await page.waitForTimeout(1200);
   await page.click('#pauseDrawing');
   await page.waitForFunction(() => window.AlgoAnimate.diagnostics().paused && !window.AlgoAnimate.diagnostics().drawing.flowing);
@@ -280,8 +295,8 @@ try {
   assert.equal(await page.locator('#demoPlayer').getAttribute('src'), null);
   await resumeDemo();
   assert.deepEqual(errors, []);
-  assert.ok(new Set(musicRequests).size === 3, 'All three bundled recordings are playable');
-  console.log('PASS: solo/mute, overlay, performance, shortcuts, wake lock, vector/3x export, score pixel determinism, click-to-play, pause/resume, three tracks, real automatic advance, wrap, export sound, mobile and reconnect. Export RMS:', rms.toFixed(4));
+  assert.ok(new Set(musicRequests).size >= 7, 'At least one real recording from each genre is playable');
+  console.log('PASS: solo/mute, overlay, performance, shortcuts, wake lock, vector/3x export, score pixel determinism, click-to-play, pause/resume, multi-genre rotation, real automatic advance, wrap, export sound, mobile and reconnect. Export RMS:', rms.toFixed(4));
 } catch (error) {
   await page.screenshot({ path: resolve(results, 'failure.png'), fullPage: true }).catch(() => {});
   await writeFile(resolve(results, 'failure.txt'), error.stack + '\n' + errors.join('\n'));
