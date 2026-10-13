@@ -4,10 +4,10 @@ cd "$(dirname "$0")/.."
 PIN="$(grep -oE '[0-9a-f]{40}' vendor/algoart/PROVENANCE.md | head -n 1)"
 [[ "$PIN" =~ ^[0-9a-f]{40}$ ]] || { echo 'Invalid vendor provenance commit' >&2; exit 1; }
 tmp="$(mktemp -d)"
-trap 'rm -rf "$tmp"' EXIT
+trap 'rm -rf "$tmp" >/dev/null 2>&1 || true' EXIT
 git -C "$tmp" init -q
 git -C "$tmp" remote add origin https://github.com/southernadd-cmyk/algoart.git
-git -C "$tmp" fetch -q --depth 1 origin "$PIN"
+git -C "$tmp" -c gc.auto=0 fetch -q --depth 1 origin "$PIN"
 git -C "$tmp" checkout -q --detach FETCH_HEAD
 test "$(git -C "$tmp" rev-parse HEAD)" = "$PIN"
 shopt -s nullglob
@@ -37,7 +37,7 @@ echo "Vendor matches pinned AlgoArt $PIN"
 # composition source. Never silently rebase the material to upstream main.
 MATERIAL_PIN="$(grep -oE '[0-9a-f]{40}' materials/tissue-v6/PROVENANCE.md | head -n 1)"
 [[ "$MATERIAL_PIN" =~ ^[0-9a-f]{40}$ ]] || { echo 'Invalid material provenance commit' >&2; exit 1; }
-git -C "$tmp" fetch -q --depth 1 origin "$MATERIAL_PIN"
+git -C "$tmp" -c gc.auto=0 fetch -q --depth 1 origin "$MATERIAL_PIN"
 git -C "$tmp" checkout -q --detach FETCH_HEAD
 test "$(git -C "$tmp" rev-parse HEAD)" = "$MATERIAL_PIN"
 for name in oil-render.js oil-surface.js oil-material.js; do
