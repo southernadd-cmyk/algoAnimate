@@ -84,19 +84,24 @@ try {
   assert.equal(await page.locator('#playDemo').getAttribute('aria-busy'), 'true');
   releaseFirstTrack();
   await musicReady('Bubbles');
-  // Actual Chromium V6 worker integration: opt-in layered rendering creates a
-  // transferable cached composite and returns to authoritative V6 cleanly.
-  assert.equal(await page.locator('#layeredTissue').isChecked(), false);
-  await page.check('#layeredTissue');
+  // Independent layer caching is the default Tissue material, not an opt-in toggle.
+  assert.equal(await page.locator('#layeredTissue').count(), 0);
+  assert.equal(await page.locator('#materialMode').inputValue(), 'tissue');
   await page.waitForFunction(() => {
     const d = window.AlgoAnimate.diagnostics();
-    return d.material.layeredExperiment && d.material.frameReady;
+    return d.material.name === 'Tissue & Graphite' && d.material.compositionCache && d.material.frameReady;
   }, null, { timeout: 30000 });
   assert.equal(await page.locator('#message').textContent() === 'Tissue & Graphite rendering failed:', false);
-  await page.screenshot({ path: resolve(results, 'layered-tissue-experiment.png') });
-  await page.uncheck('#layeredTissue');
-  await page.waitForFunction(() => window.AlgoAnimate.diagnostics().material.frameReady, null, { timeout: 30000 });
-  assert.equal((await state()).material.layeredExperiment, false);
+  await page.screenshot({ path: resolve(results, 'tissue-composition-cache-default.png') });
+  // The original marker material remains selectable without a checkbox.
+  await page.selectOption('#materialMode', 'marker');
+  assert.equal((await state()).material.name, 'Marker');
+  assert.equal((await state()).material.compositionCache, false);
+  await page.selectOption('#materialMode', 'tissue');
+  await page.waitForFunction(() => {
+    const material = window.AlgoAnimate.diagnostics().material;
+    return material.compositionCache && material.frameReady;
+  }, null, { timeout: 30000 });
   assert.equal(await page.locator('#demoButtonLabel').textContent(), 'Demo playing');
   assert.equal(await page.locator('#playDemo').getAttribute('aria-busy'), 'false');
   assert.equal(await page.locator('#demoTrackNumber').textContent(),

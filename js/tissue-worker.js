@@ -25,7 +25,7 @@ A.render = () => {
 
 
 /*
- * Opt-in live experiment: composite each sound-driven composition separately.
+ * Standard live mode: composite each sound-driven composition separately.
  * An immutable layer never borrows another voice's seed or random stream.
  * All conversion and cached bitmaps stay in this worker; ALGO/ART V6 sources
  * remain byte-identical to their pinned upstream commit.

@@ -1,6 +1,6 @@
 {
   "name": "algoanimate",
-  "version": "0.0.20",
+  "version": "0.0.21",
   "private": true,
   "type": "module",
   "description": "Sound-driven golden-ratio compositions, live in the browser.",
