@@ -18,6 +18,8 @@ export class TissueMaterial {
     this.held = false;
     this.lastRequest = 0;
     this.textureSeed = null;
+    this.presentedValid = false;
+    this.presentedFrame = null;
     this.quality = mobile ? 0.27 : 0.39;
     this.minInterval = mobile ? 60 : 110;
     this.blendMs = mobile ? 85 : 0;
@@ -41,6 +43,7 @@ export class TissueMaterial {
     this.epoch++;
     this.pending = false; this.held = false; this.lastRequest = 0;
     this.textureSeed = null;
+    this.presentedValid = false; this.presentedFrame = null;
     this.frame?.close(); this.frame = null;
     this.previousFrame?.close(); this.previousFrame = null;
     this.completedTimes = []; this.fastFrames = 0; this.receivedAt = 0;
@@ -118,6 +121,12 @@ export class TissueMaterial {
     return colours.length ? colours : ['#748e83', '#bc803f', '#626f61'];
   }
   present(sheet, now = performance.now(), freeze = false) {
+    const blending = this.previousFrame && this.frame && this.blendMs && !freeze
+      && now - this.receivedAt < this.blendMs;
+    // Don't repaint a million-pixel sheet for every idle animation tick.
+    // No other renderer touches this canvas in tissue-only mode.
+    if (this.presentedValid && !blending && this.presentedFrame === this.frame
+      && this.lastWidth === this.canvas.width && this.lastHeight === this.canvas.height) return;
     this.context.save();
     this.context.globalCompositeOperation = 'source-over';
     this.context.globalAlpha = 1;
@@ -136,6 +145,8 @@ export class TissueMaterial {
     }
     if (this.frame) this.context.drawImage(this.frame, 0, 0, this.canvas.width, this.canvas.height);
     this.context.restore();
+    this.presentedValid = true; this.presentedFrame = this.frame;
+    this.lastWidth = this.canvas.width; this.lastHeight = this.canvas.height;
   }
   paint(sheet, seed, palette, now = performance.now()) {
     this.present(sheet, now);
@@ -143,6 +154,7 @@ export class TissueMaterial {
     if (!sheet.paths.length) {
       this.frame?.close(); this.frame = null;
       this.previousFrame?.close(); this.previousFrame = null;
+      this.presentedValid = false;
       return;
     }
     this.pending = true; this.lastRequest = now; this.lastRequestAt = performance.now();
