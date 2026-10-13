@@ -152,7 +152,6 @@ function syncScoreControls() {
       : 'Every take also captures a score. Replay the ink without audio.';
   for (const id of ['palette', 'density', 'evolution', 'sensitivity', 'motion', 'smoothing', 'gentle']) $(id).disabled = Boolean(replay);
   $('materialMode').disabled = Boolean(replay) || recorder.busy || startRecordPending;
-  $('layeredTissue').disabled = Boolean(replay) || recorder.busy || startRecordPending || materialMode === 'marker';
 }
 function setSheetSize(sheet) {
   if (art.width !== sheet.width) art.width = sheet.width;
@@ -271,7 +270,6 @@ function syncControls() {
   $('orientation').disabled = recorder.busy || startRecordPending || Boolean(replay);
   $('sharedAnchor').disabled = recorder.busy || startRecordPending || Boolean(replay);
   $('materialMode').disabled = recorder.busy || startRecordPending || Boolean(replay);
-  $('layeredTissue').disabled = recorder.busy || startRecordPending || Boolean(replay) || materialMode === 'marker';
   $('includeWaveform').disabled = recorder.busy || startRecordPending;
   $('record').disabled = Boolean(replay) || !audio.kind || !recorder.mimeType || !artwork.ready || locked || preparing;
   $('record').hidden = recorder.busy;
@@ -434,14 +432,6 @@ for (const id of ['orientation', 'palette', 'density', 'sharedAnchor']) {
     generateAll(id === 'orientation' || id === 'sharedAnchor' || !soundGate.open);
   });
 }
-$('layeredTissue').addEventListener('change', () => {
-  if (replay || recorder.busy || startRecordPending) {
-    $('layeredTissue').checked = false;
-    return;
-  }
-  // Cache experimentation never mutates the historical score format.
-  tissue.reset();
-});
 $('materialMode').addEventListener('change', () => {
   if (replay || recorder.busy || startRecordPending) {
     $('materialMode').value = materialMode;
@@ -698,10 +688,8 @@ function frame(now) {
     }
   }
   artwork.draw(dt, +$('motion').value / 100, $('gentle').checked, cycle);
-  if (artwork.paperScene && materialMode === 'tissue') {
-    if ($('layeredTissue').checked) tissue.liveLayered(artwork, $('gentle').checked, now);
-    else tissue.live(artwork, $('gentle').checked, now);
-  }
+  if (artwork.paperScene && materialMode === 'tissue')
+    tissue.liveLayered(artwork, $('gentle').checked, now);
   drawWaveform(data?.wave);
   if (recorder.active) { paintRecording(); recorder.captureFrame(); }
   if (scoreCapture && !scoreCapture.capture(now, artwork, features, $('gentle').checked)) finishScore();
@@ -714,13 +702,13 @@ window.addEventListener('pagehide', () => { if (recorder.active) recorder.stop()
 
 // Small read-only diagnostics surface for smoke tests and bug reports.
 window.AlgoAnimate = Object.freeze({
-  version: '0.20',
+  version: '0.21',
   diagnostics: () => ({
     source: audio.kind, paused: drawingPaused, performance: performanceMode, wakeLock: awake.status,
     replay: replay ? { frame: replay.index, time: replay.time, paused: replay.paused, duration: replay.score.duration } : null,
     score: scoreData ? { frames: scoreData.frames.length, scenes: scoreData.scenes.length, duration: scoreData.duration } : null,
     audio: audio.diagnostics(), seed: artwork.drawnSeed, engine: 'ensemble',
-    material: { name: materialMode === 'tissue' ? 'Tissue & Graphite' : 'Marker', layeredExperiment: $('layeredTissue').checked, revision: materialMode === 'tissue' ? 6 : null,
+    material: { name: materialMode === 'tissue' ? 'Tissue & Graphite' : 'Marker', compositionCache: materialMode === 'tissue', revision: materialMode === 'tissue' ? 6 : null,
       worker: Boolean(tissue.worker), frameReady: Boolean(tissue.frame) },
     demo: audio.kind === 'demo' ? { title: demoPlaylist.track.title, index: demoPlaylist.index,
       tracks: DEMO_TRACKS.length, paused: demoPlayer.paused, time: demoPlayer.currentTime } : null,
