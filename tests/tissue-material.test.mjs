@@ -60,3 +60,57 @@ test('A cleared or replaced sheet discards late bitmap results', () => {
     painter.dispose();
   } finally { globalThis.Worker = before; }
 });
+
+
+test('Mobile uses cheaper frames, retains a stable texture seed and reports worker throughput', () => {
+  const before = globalThis.Worker;
+  globalThis.Worker = MockWorker;
+  try {
+    const painter = new TissueMaterial(makeCanvas(), () => {}, { mobile: true });
+    assert.equal(painter.quality, 0.27);
+    assert.equal(painter.currentSeed('MIX-FIRST'), 'MIX-FIRST');
+    assert.equal(painter.currentSeed('MIX-NEXT'), 'MIX-FIRST');
+    painter.paint(stroke, 'MIX-FIRST', [], 1000);
+    const request = painter.worker.messages[0];
+    assert.equal(request.quality, 0.27);
+    assert.equal(request.sheet.paperMarks, undefined);
+    const first = { closed: false, close() { this.closed = true; } };
+    painter.receive({ id: request.id, epoch: request.epoch, bitmap: first, renderMs: 120 });
+    assert.equal(painter.stats.mobile, true);
+    assert.ok(painter.stats.workerMs >= 100);
+    assert.equal(painter.quality, 0.27);
+    painter.reset();
+    assert.equal(first.closed, true);
+    assert.equal(painter.currentSeed('MIX-NEW'), 'MIX-NEW');
+    painter.dispose();
+  } finally { globalThis.Worker = before; }
+});
+
+test('Mobile interpolates between painted frames but avoids unchanged repaints', () => {
+  const before = globalThis.Worker;
+  globalThis.Worker = MockWorker;
+  try {
+    const canvas = makeCanvas();
+    const painter = new TissueMaterial(canvas, () => {}, { mobile: true });
+    painter.paint(stroke, 'S', [], 1000);
+    const one = painter.worker.messages[0];
+    const first = { closed: false, close() { this.closed = true; } };
+    painter.receive({ id: one.id, epoch: one.epoch, bitmap: first, renderMs: 40 });
+    painter.present(stroke);
+    canvas.ops.length = 0;
+    painter.present(stroke);
+    assert.equal(canvas.ops.length, 0, 'The unchanged screen is not repainted');
+    painter.paint(stroke, 'S', [], 1100);
+    const two = painter.worker.messages[1];
+    const second = { closed: false, close() { this.closed = true; } };
+    painter.receive({ id: two.id, epoch: two.epoch, bitmap: second, renderMs: 40 });
+    canvas.ops.length = 0;
+    painter.present(stroke, performance.now() + 40);
+    assert.equal(canvas.ops.filter(([type]) => type === 'material').length, 2,
+      'Two bitmaps are crossfaded rather than jumping immediately');
+    painter.present(stroke, performance.now() + 100);
+    assert.equal(first.closed, true, 'The old material bitmap is promptly freed');
+    painter.dispose();
+    assert.equal(second.closed, true);
+  } finally { globalThis.Worker = before; }
+});
