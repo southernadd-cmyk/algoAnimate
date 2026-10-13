@@ -27,6 +27,8 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Ensure audio and video inspection tools
         run: command -v ffprobe || (sudo apt-get update && sudo apt-get install -y ffmpeg)
+      - name: Fetch and validate CC0 multi-genre demo tracks
+        run: bash scripts/fetch-demo-music.sh
       - name: Browser, mobile, meter, sound and recording checks
         run: npm run test:browser
       - name: Retain test files
