@@ -52,9 +52,9 @@
       <aside class="desk" aria-label="Audio and artwork controls">
         <section class="desk-section source-section" id="sources" tabindex="-1">
           <div class="section-label"><span>01 / AUDIO IN</span><h2>Find your sound.</h2></div>
-          <p class="section-note">Start with a lo-fi demo, or bring your own sound.</p>
+          <p class="section-note">Explore music genres, or bring your own sound.</p>
           <div class="source-main">
-          <button type="button" class="source-button primary" id="playDemo"><span class="button-icon" aria-hidden="true">▶</span><span><span id="demoButtonLabel">Try demo sound</span><small>Three lo-fi tracks. One click to draw.</small></span><span aria-hidden="true">→</span></button>
+          <button type="button" class="source-button primary" id="playDemo"><span class="button-icon" aria-hidden="true">▶</span><span><span id="demoButtonLabel">Try demo sound</span><small>Lo-fi, drum &amp; bass, jazz, classical + more.</small></span><span aria-hidden="true">→</span></button>
           <button type="button" class="source-button" id="connectTab"><span class="button-icon" aria-hidden="true">↗</span><span>Browser tab<small>Share a tab and its audio · desktop Chrome</small></span><span aria-hidden="true">→</span></button>
           <button type="button" class="source-button" id="chooseFile"><span class="button-icon" aria-hidden="true">＋</span><span>Audio file<small>Play from your device</small></span><span aria-hidden="true">→</span></button>
           </div>
@@ -62,9 +62,10 @@
           <button type="button" class="microphone-button" id="connectMic">Use microphone</button>
           <div class="source-summary"><span class="source-dot" id="sourceDot" aria-hidden="true"></span><span id="sourceName">No audio connected</span><button type="button" id="stopAudio" class="text-button" disabled>Disconnect</button></div>
           <div class="demo-deck" id="demoDeck" hidden>
-            <div class="demo-track"><span id="demoTrackNumber"></span><a id="demoTrackLink" href="https://holiznacc0.bandcamp.com/track/bubbles" target="_blank" rel="noopener">Bubbles</a><button type="button" id="nextDemo" class="text-button" aria-label="Play the next demo track">Next ↗</button></div>
-            <audio id="demoPlayer" controls preload="none" aria-label="Lo-fi demo music player"></audio>
-            <p class="demo-credit">Music by <a href="https://holiznacc0.bandcamp.com/album/public-domain-lo-fi" target="_blank" rel="noopener">HoliznaCC0</a> · <a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener">CC0</a> · three tracks on rotation</p>
+            <div class="demo-genre"><span id="demoGenreNumber">01 / 05</span><strong id="demoGenreName">Lo-fi</strong><button type="button" id="nextGenre" class="text-button" aria-label="Play the next demo genre">Next genre ↗</button></div>
+            <div class="demo-track"><span id="demoTrackNumber"></span><a id="demoTrackLink" href="https://holiznacc0.bandcamp.com/track/bubbles" target="_blank" rel="noopener">Bubbles</a><button type="button" id="nextDemo" class="text-button" aria-label="Play the next demo track">Next track ↗</button></div>
+            <audio id="demoPlayer" controls preload="none" aria-label="Demo music player"></audio>
+            <p class="demo-credit">Music by <span id="demoArtist">HoliznaCC0</span> · <a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener">CC0</a> · source linked above</p>
           </div>
           <audio id="filePlayer" controls preload="metadata" hidden aria-label="Uploaded audio file player"></audio>
           <details class="source-help"><summary>How browser audio works</summary><p>Play sound in another tab. Choose <strong>Browser tab</strong>, select that tab and enable <strong>Share tab audio</strong>. Return here to watch. Use desktop Chrome for tab capture; files and microphone work in more browsers.</p><p>Tab sharing also asks for a video track. AlgoAnimate uses the audio; your recording contains the generated artwork.</p></details>
@@ -80,8 +81,8 @@
             <div class="range-control"><label for="sensitivity">Audio sensitivity</label><output for="sensitivity" id="sensitivityValue">100%</output><input type="range" id="sensitivity" min="25" max="300" value="100" step="5"><div class="range-note"><span>Quiet source</span><span>Stronger response</span></div></div>
             <div class="range-control"><label for="motion">Sound response</label><output for="motion" id="motionValue">60%</output><input type="range" id="motion" min="0" max="100" value="60"><div class="range-note"><span>Gentle marks</span><span>Sound-driven</span></div></div>
             <div class="range-control"><label for="smoothing">Smoothing</label><output for="smoothing" id="smoothingValue">55%</output><input type="range" id="smoothing" min="0" max="100" value="55"><div class="range-note"><span>Immediate</span><span>Fluid</span></div></div>
-            <label class="check-label"><input type="checkbox" id="gentle"> Gentle motion</label>
-            <label class="check-label"><input type="checkbox" id="sharedAnchor" checked> Eight golden territories</label>
+            <label class="check-label"><input type="checkbox" id="gentle" checked> Gentle motion</label>
+            <label class="check-label"><input type="checkbox" id="sharedAnchor"> Eight golden territories</label>
           </details>
           <p class="control-note">Pause the sound to hold the drawing. Play again and the tissue and graphite continue building.</p>
         </section>
