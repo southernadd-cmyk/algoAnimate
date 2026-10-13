@@ -44,6 +44,7 @@ let clock = 0, previousFrame = 0, uiTime = 0, onsetUntil = 0, clearHoldUntil = 0
 let frames = 0, fpsStart = performance.now(), fps = 0, recordingWithWaveform = false;
 let startRecordPending = false, demoSwitching = false;
 let drawingPaused = false, performanceMode = false, performanceTimer = null;
+let materialMode = 'tissue';
 let scoreCapture = null, scoreData = null, replay = null, scoreTakeStarted = null;
 const waveHistory = [];
 const listening = new ListeningOverlay($('listeningOverlay'), artwork.voices.map(voice => voice.route));
@@ -131,7 +132,9 @@ function syncMix() {
 function syncScoreCapture() {
   if (recorder.active && scoreTakeStarted !== recorder.started) {
     scoreTakeStarted = recorder.started;
-    scoreData = null; scoreCapture = new ScoreCapture(recorder.started, sourceLabel, { seed: tissue.seed(artwork), palette: tissue.palette(artwork) });
+    scoreData = null; scoreCapture = new ScoreCapture(recorder.started, sourceLabel,
+      materialMode === 'tissue' ? { seed: tissue.seed(artwork), palette: tissue.palette(artwork) } : null,
+      materialMode === 'tissue' ? 'tissue-graphite-v6' : 'marker');
     scoreCapture.capture(recorder.started, artwork, features, $('gentle').checked);
   } else if (!recorder.active && scoreCapture) finishScore();
 }
@@ -148,6 +151,7 @@ function syncScoreControls() {
     : scoreData ? formatTime(scoreData.duration / 1000) + ' · ' + scoreData.frames.length + ' frames · replay without audio'
       : 'Every take also captures a score. Replay the ink without audio.';
   for (const id of ['palette', 'density', 'evolution', 'sensitivity', 'motion', 'smoothing', 'gentle']) $(id).disabled = Boolean(replay);
+  $('materialMode').disabled = Boolean(replay) || recorder.busy || startRecordPending;
 }
 function setSheetSize(sheet) {
   if (art.width !== sheet.width) art.width = sheet.width;
@@ -265,6 +269,7 @@ function syncControls() {
   $('stopAudio').disabled = !audio.kind || pending || startRecordPending;
   $('orientation').disabled = recorder.busy || startRecordPending || Boolean(replay);
   $('sharedAnchor').disabled = recorder.busy || startRecordPending || Boolean(replay);
+  $('materialMode').disabled = recorder.busy || startRecordPending || Boolean(replay);
   $('includeWaveform').disabled = recorder.busy || startRecordPending;
   $('record').disabled = Boolean(replay) || !audio.kind || !recorder.mimeType || !artwork.ready || locked || preparing;
   $('record').hidden = recorder.busy;
@@ -427,6 +432,19 @@ for (const id of ['orientation', 'palette', 'density', 'sharedAnchor']) {
     generateAll(id === 'orientation' || id === 'sharedAnchor' || !soundGate.open);
   });
 }
+$('materialMode').addEventListener('change', () => {
+  if (replay || recorder.busy || startRecordPending) {
+    $('materialMode').value = materialMode;
+    return;
+  }
+  materialMode = $('materialMode').value === 'marker' ? 'marker' : 'tissue';
+  document.body.classList.toggle('marker-mode', materialMode === 'marker');
+  for (const voice of artwork.voices) voice.art.materialOnly = materialMode === 'tissue';
+  tissue.reset();
+  if (materialMode === 'marker' && artwork.ready)
+    artwork.draw(0, +$('motion').value / 100, $('gentle').checked, evolutionInterval(+$('evolution').value));
+  syncControls();
+});
 for (const id of ['sensitivity', 'motion', 'evolution', 'smoothing', 'density']) {
   const update = () => $(id + 'Value').textContent = id === 'evolution'
     ? '~' + evolutionInterval(+$(id).value).toFixed(1) + 's' : $(id).value + '%';
@@ -524,7 +542,7 @@ $('snapshot').addEventListener('click', async () => {
     if (format === 'print') {
       canvas.width = sheet.width * 3; canvas.height = sheet.height * 3;
       const printCtx = canvas.getContext('2d', { alpha: false });
-      if (!replay || tissueReplay()) {
+      if (replay ? tissueReplay() : materialMode === 'tissue') {
         // Full V6 pigment/height/graphite re-render, not a 3x upscaled marker.
         const bitmap = await tissue.renderOnce(sheet,
           replay ? replaySeed() : tissue.seed(artwork), replay ? replayPalette() : tissue.palette(artwork));
@@ -603,7 +621,7 @@ function updateUI(now) {
     if (style && controls.styleToken !== style.token) {
       controls.styleToken = style.token;
       controls.row.dataset.pen = style.pen.id; controls.row.dataset.palette = style.palette.id;
-      controls.pen.textContent = 'Tissue & graphite'; controls.palette.textContent = style.palette.name;
+      controls.palette.textContent = style.palette.name;
       controls.row.style.setProperty('--ink-color', style.colors[0]);
       controls.swatches.replaceChildren(...style.colors.map(color => {
         const swatch = document.createElement('i'); swatch.style.backgroundColor = color; return swatch;
@@ -617,6 +635,7 @@ function updateUI(now) {
           { x: 44 + i * 78, y: 40 }, { x: 72 + i * 78, y: 18 }],
         style.colors[i], styleSettings(style), random, true);
     }
+    controls.pen.textContent = materialMode === 'tissue' ? 'Tissue & graphite' : style?.pen?.name || 'Marker';
   }
   $('recordTime').textContent = recorder.busy ? formatTime((now - recorder.started) / 1000) : '00:00';
   if (!$('listeningOverlay').hidden) listening.update(features, replay ? replay.engines : artwork.diagnostics(), Boolean(replay));
@@ -669,7 +688,7 @@ function frame(now) {
     }
   }
   artwork.draw(dt, +$('motion').value / 100, $('gentle').checked, cycle);
-  if (artwork.paperScene) tissue.live(artwork, $('gentle').checked, now);
+  if (artwork.paperScene && materialMode === 'tissue') tissue.live(artwork, $('gentle').checked, now);
   drawWaveform(data?.wave);
   if (recorder.active) { paintRecording(); recorder.captureFrame(); }
   if (scoreCapture && !scoreCapture.capture(now, artwork, features, $('gentle').checked)) finishScore();
@@ -688,7 +707,8 @@ window.AlgoAnimate = Object.freeze({
     replay: replay ? { frame: replay.index, time: replay.time, paused: replay.paused, duration: replay.score.duration } : null,
     score: scoreData ? { frames: scoreData.frames.length, scenes: scoreData.scenes.length, duration: scoreData.duration } : null,
     audio: audio.diagnostics(), seed: artwork.drawnSeed, engine: 'ensemble',
-    material: { name: 'Tissue & Graphite', revision: 6, worker: Boolean(tissue.worker), frameReady: Boolean(tissue.frame) },
+    material: { name: materialMode === 'tissue' ? 'Tissue & Graphite' : 'Marker', revision: materialMode === 'tissue' ? 6 : null,
+      worker: Boolean(tissue.worker), frameReady: Boolean(tissue.frame) },
     demo: audio.kind === 'demo' ? { title: demoPlaylist.track.title, index: demoPlaylist.index,
       tracks: DEMO_TRACKS.length, paused: demoPlayer.paused, time: demoPlayer.currentTime } : null,
     engines: artwork.diagnostics(), compositions: artwork.sceneCount,
