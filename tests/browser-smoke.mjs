@@ -753,6 +753,23 @@ try {
       assert.ok(resumed.delay < 650, width + 'px mobile canvas starts fresh strokes promptly');
       await mobilePage.screenshot({ path: resolve(results, 'mobile-touch-' + width + '.png'), fullPage: true });
     }
+    // Mobile layout checks previously never exercised the actual mobile
+    // encoder. Capture a real touch-context take and inspect the output.
+    const mobileMaterial = await mobilePage.evaluate(() => window.AlgoAnimate.diagnostics().material);
+    assert.equal(mobileMaterial.mobile, true, 'Touch-sized mobile view uses low-cost tissue rendering');
+    assert.ok(mobileMaterial.workerMs > 0, 'Mobile material worker reports completed render time');
+    await mobilePage.locator('#record').tap();
+    await mobilePage.waitForFunction(() => window.AlgoAnimate.diagnostics().recording);
+    await mobilePage.waitForTimeout(1600);
+    await mobilePage.locator('#stopRecording').tap();
+    await mobilePage.waitForFunction(() => !window.AlgoAnimate.diagnostics().recordingBusy, null, { timeout: 20000 });
+    const mobileDownload = mobilePage.waitForEvent('download');
+    await mobilePage.locator('#download').tap();
+    const mobileFile = resolve(results, 'mobile-recording.webm');
+    await (await mobileDownload).saveAs(mobileFile);
+    const mobileTake = JSON.parse(execFileSync('ffprobe',
+      ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', mobileFile], { encoding: 'utf8' }));
+    checkTake(mobileTake, 1008, 720);
   } finally {
     await touchContext.close();
   }

@@ -18,6 +18,13 @@ import { TissueMaterial } from './tissue-material.js';
 const $ = id => document.getElementById(id);
 const art = $('art'), waveform = $('waveform'), player = $('filePlayer'), demoPlayer = $('demoPlayer');
 const waveContext = waveform.getContext('2d');
+// Use a less expensive material and hardware-friendlier recording on phones.
+// Touch-only tablets may opt in too; desktops retain their current fidelity.
+const mobileRendering = Boolean(navigator.userAgentData?.mobile)
+  || (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+    && matchMedia('(pointer: coarse)').matches)
+  || (matchMedia('(pointer: coarse)').matches && matchMedia('(max-width: 1024px)').matches);
+const recordingScale = mobileRendering ? 0.72 : 1;
 const recordingCanvas = document.createElement('canvas');
 const recordingContext = recordingCanvas.getContext('2d', { alpha: false });
 const artwork = new LayeredArtwork(art), builder = new SceneBuilder();
@@ -28,7 +35,7 @@ const tissue = new TissueMaterial(art, error => {
   const notice = document.getElementById('message');
   notice.textContent = 'Tissue & Graphite rendering failed: ' + error.message;
   notice.hidden = false; notice.classList.add('error');
-});
+}, { mobile: mobileRendering });
 const tissueReplay = () => Boolean(replay?.score.material === 'tissue-graphite-v6');
 function replayPalette() { return replay.materialFrame[1]; }
 function replaySeed() { return replay.materialFrame[0]; }
@@ -100,6 +107,7 @@ function formatTime(seconds) {
 function fileStamp() { return new Date().toISOString().replace(/[-:]/g, '').slice(0, 15).replace('T', '-'); }
 
 const recorder = new VideoRecorder({
+  mobile: mobileRendering,
   onChange: () => { syncScoreCapture(); syncControls(); updateTake(); },
   onError: error => message(error.message, true)
 });
@@ -133,7 +141,7 @@ function syncScoreCapture() {
   if (recorder.active && scoreTakeStarted !== recorder.started) {
     scoreTakeStarted = recorder.started;
     scoreData = null; scoreCapture = new ScoreCapture(recorder.started, sourceLabel);
-    scoreCapture.capture(recorder.started, artwork, features, $('gentle').checked);
+    scoreCapture.capture(recorder.started, artwork, features, $('gentle').checked, tissue.currentSeed(artwork.drawnSeed));
   } else if (!recorder.active && scoreCapture) finishScore();
 }
 function finishScore() {
@@ -395,7 +403,9 @@ async function generateAll(immediate = false) {
     }));
     if (request !== layoutGeneration) return;
     if (scenes.some(scene => !scene.paths.length)) throw new Error('A layer did not produce any marker paths.');
+    const resized = art.width !== scenes[0].width || art.height !== scenes[0].height;
     artwork.setScenes(scenes, immediate);
+    if (resized) tissue.reset();
     artwork.voices.forEach((voice, index) => { voice.lastCompositionProfile = snapshots[index]; });
     $('stage').classList.toggle('portrait', scenes[0].height > scenes[0].width);
     $('dimensions').textContent = scenes[0].width + ' × ' + scenes[0].height;
@@ -469,14 +479,18 @@ function drawWaveform(data) {
 function paintRecording() {
   if (!recordingCanvas.width || !recordingCanvas.height) return;
   const width = recordingCanvas.width;
+  const scale = width / art.width;
+  recordingContext.save();
+  recordingContext.setTransform(scale, 0, 0, scale, 0, 0);
   recordingContext.globalAlpha = 1;
-  recordingContext.drawImage(art, 0, 0, width, art.height);
+  recordingContext.drawImage(art, 0, 0, art.width, art.height);
   if (recordingWithWaveform) {
     recordingContext.fillStyle = '#222620'; recordingContext.fillRect(0, art.height, width, 156);
     recordingContext.fillStyle = '#d7ed99'; recordingContext.font = '14px monospace';
     recordingContext.fillText('ALGO / ANIMATE  ·  INCOMING SOUND', 24, art.height + 27);
-    recordingContext.drawImage(waveform, 24, art.height + 38, width - 48, 98);
+    recordingContext.drawImage(waveform, 24, art.height + 38, art.width - 48, 98);
   }
+  recordingContext.restore();
 }
 
 $('record').addEventListener('click', async () => {
@@ -485,8 +499,10 @@ $('record').addEventListener('click', async () => {
   try {
     await audio.ready();
     recordingWithWaveform = $('includeWaveform').checked;
-    recordingCanvas.width = art.width;
-    recordingCanvas.height = art.height + (recordingWithWaveform ? 156 : 0);
+    // Smaller on-device encode buffers roughly halve memory bandwidth and
+    // pixel-copy cost while maintaining full-size still/print export.
+    recordingCanvas.width = Math.round(art.width * recordingScale / 2) * 2;
+    recordingCanvas.height = Math.round((art.height + (recordingWithWaveform ? 156 : 0)) * recordingScale / 2) * 2;
     paintRecording();
     recorder.start(recordingCanvas, audio.recordingStream);
     message('Recording started. The download will contain this artwork and the incoming sound.');
@@ -534,7 +550,7 @@ $('snapshot').addEventListener('click', async () => {
       if (!replay || tissueReplay()) {
         // Full V6 pigment/height/graphite re-render, not a 3x upscaled marker.
         const bitmap = await tissue.renderOnce(sheet,
-          replay ? replaySeed() : artwork.drawnSeed, replay ? replayPalette() : tissue.palette(artwork));
+          replay ? replaySeed() : tissue.currentSeed(artwork.drawnSeed), replay ? replayPalette() : tissue.palette(artwork));
         try { printCtx.drawImage(bitmap, 0, 0, canvas.width, canvas.height); }
         finally { bitmap.close(); }
       } else paintSheet(printCtx, sheet, 3);
@@ -582,7 +598,7 @@ function updateUI(now) {
     $(key + 'Db').textContent = text;
   }
   $('beat').classList.toggle('lit', now < onsetUntil);
-  $('fps').textContent = String(fps || '—');
+  $('fps').textContent = String(tissue.stats.paintedFps || '—');
   $('seed').textContent = replay ? 'SCORE / FRAME ' + String(replay.index + 1) : artwork.drawnSeed || DEFAULT_SETTINGS.seed;
   $('sceneCount').textContent = String(artwork.sceneCount).padStart(2, '0');
   $('activeLayers').textContent = (replay ? replay.engines : artwork.voices).filter(voice => voice.flowing).length + ' / ' + artwork.voices.length + ' DRAWING';
@@ -679,7 +695,7 @@ function frame(now) {
   if (artwork.paperScene) tissue.live(artwork, $('gentle').checked, now);
   drawWaveform(data?.wave);
   if (recorder.active) { paintRecording(); recorder.captureFrame(); }
-  if (scoreCapture && !scoreCapture.capture(now, artwork, features, $('gentle').checked)) finishScore();
+  if (scoreCapture && !scoreCapture.capture(now, artwork, features, $('gentle').checked, tissue.currentSeed(artwork.drawnSeed))) finishScore();
   frames++;
   if (now - fpsStart > 1000) { fps = Math.round(frames * 1000 / (now - fpsStart)); frames = 0; fpsStart = now; }
   if (now - uiTime > 100) { updateUI(now); uiTime = now; }
@@ -695,7 +711,7 @@ window.AlgoAnimate = Object.freeze({
     replay: replay ? { frame: replay.index, time: replay.time, paused: replay.paused, duration: replay.score.duration } : null,
     score: scoreData ? { frames: scoreData.frames.length, scenes: scoreData.scenes.length, duration: scoreData.duration } : null,
     audio: audio.diagnostics(), seed: artwork.drawnSeed, engine: 'ensemble',
-    material: { name: 'Tissue & Graphite', revision: 6, worker: Boolean(tissue.worker), frameReady: Boolean(tissue.frame) },
+    material: { name: 'Tissue & Graphite', revision: 6, worker: Boolean(tissue.worker), frameReady: Boolean(tissue.frame), ...tissue.stats, textureLocked: Boolean(tissue.textureSeed) },
     demo: audio.kind === 'demo' ? { title: demoPlaylist.track.title, index: demoPlaylist.index,
       genre: demoPlaylist.genre.label, genreIndex: demoPlaylist.genreIndex, genres: DEMO_GENRES.length,
       tracks: demoPlaylist.genre.tracks.length, paused: demoPlayer.paused, time: demoPlayer.currentTime } : null,

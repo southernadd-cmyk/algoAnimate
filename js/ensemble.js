@@ -261,11 +261,16 @@ export class LayeredArtwork {
     if (!this.ready) return;
     this.syncFocal(this.voices.some(voice => this.enabled(voice) && voice.flowing) ? dt : 0);
     const ctx = this.context, scene = this.paperScene;
-    ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
-    ctx.fillStyle = scene.paper; ctx.fillRect(0, 0, scene.width, scene.height);
-    ctx.globalAlpha = 0.035;
-    for (const mark of scene.paperMarks) {
-      ctx.fillStyle = mark.colour; ctx.fillRect(mark.x, mark.y, mark.w, mark.h);
+    // Tissue mode presents its own completed bitmap immediately afterwards.
+    // Painting a full 1400 × 1000 cream sheet and its grain 30 times a second
+    // here was wasted main-thread raster work, especially on mobile.
+    if (!this.voices.every(voice => voice.art.materialOnly)) {
+      ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+      ctx.fillStyle = scene.paper; ctx.fillRect(0, 0, scene.width, scene.height);
+      ctx.globalAlpha = 0.035;
+      for (const mark of scene.paperMarks) {
+        ctx.fillStyle = mark.colour; ctx.fillRect(mark.x, mark.y, mark.w, mark.h);
+      }
     }
     // The first *active* voice makes a short real mark in the very first
     // audible frame. Other active voices enter over ~200ms rather than

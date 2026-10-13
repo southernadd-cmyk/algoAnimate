@@ -1,19 +1,26 @@
 import { fixWebmDuration } from './webm.js';
 
 export const MAX_TAKE_SECONDS = 180;
-export function supportedRecordingType(Recorder = globalThis.MediaRecorder) {
+export function supportedRecordingType(Recorder = globalThis.MediaRecorder, mobile = false) {
   if (!Recorder?.isTypeSupported) return null;
-  for (const type of ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4']) {
+  // Phones often have dedicated H.264 encode hardware; VP9 in software can
+  // starve the tissue worker and produce stuttering video/audio.
+  const types = mobile
+    ? ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4',
+      'video/webm;codecs=vp8,opus', 'video/webm', 'video/webm;codecs=vp9,opus']
+    : ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus',
+      'video/webm', 'video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4'];
+  for (const type of types) {
     if (Recorder.isTypeSupported(type)) return type;
   }
   return null;
 }
 
 export class VideoRecorder {
-  constructor({ onChange = () => {}, onError = () => {} } = {}) {
+  constructor({ onChange = () => {}, onError = () => {}, mobile = false } = {}) {
     this.onChange = onChange; this.onError = onError;
     this.recorder = null; this.result = null; this.stream = null;
-    this.mimeType = supportedRecordingType();
+    this.mimeType = supportedRecordingType(globalThis.MediaRecorder, mobile);
   }
   get active() { return Boolean(this.recorder && this.recorder.state !== 'inactive'); }
   get busy() { return this.active || Boolean(this.stopping) || Boolean(this.finishing); }

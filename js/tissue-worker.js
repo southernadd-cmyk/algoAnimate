@@ -26,6 +26,7 @@ A.render = () => {
 self.onmessage = ({ data }) => {
   const { id, epoch, sheet, seed, palette, quality = 0.39 } = data;
   try {
+    const started = performance.now();
     // Palette swatches do not contain drawable geometry; they fix the material
     // colours across a partial-stroke animation and are skipped by skeleton().
     visible = [...(palette || []).slice(0, 12).map(stroke => ({
@@ -39,7 +40,7 @@ self.onmessage = ({ data }) => {
       paper: '#f5f0e6'
     }, quality, false, 6);
     const bitmap = target.transferToImageBitmap();
-    self.postMessage({ id, epoch, bitmap }, [bitmap]);
+    self.postMessage({ id, epoch, bitmap, renderMs: performance.now() - started }, [bitmap]);
   } catch (error) {
     self.postMessage({ id, epoch, error: String(error?.message || error) });
   } finally {
