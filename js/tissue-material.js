@@ -132,7 +132,7 @@ export class TissueMaterial {
     if (!this.layerIds.has(layer)) this.layerIds.set(layer, ++this.layerIdCounter);
     return this.layerIds.get(layer);
   }
-  // Experimental mode is opt-in. One composition is repainted per worker job;
+  // Standard Tissue & Graphite mode: one composition is repainted per worker job;
   // every OTHER composition reuses a cached transparent bitmap. Layers with
   // advancing ink windows must eventually update again, even after age 1:
   // those paths recede under the original V8 ink-memory behaviour.
