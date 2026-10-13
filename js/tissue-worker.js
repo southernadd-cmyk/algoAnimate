@@ -93,7 +93,8 @@ function layeredFrame(data) {
     ctx.drawImage(cached, 0, 0, canvas.width, canvas.height);
   }
   ctx.globalAlpha = 1;
-  self.postMessage({ id, epoch, bitmap: canvas.transferToImageBitmap() }, []);
+  const bitmap = canvas.transferToImageBitmap();
+  self.postMessage({ id, epoch, bitmap }, [bitmap]);
 }
 
 self.onmessage = ({ data }) => {
