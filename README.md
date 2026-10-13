@@ -10,11 +10,11 @@ AlgoAnimate listens to music or sound and progressively assembles translucent to
 
 **Eight equal voices / one sheet:** The lead-and-support hierarchy has been replaced for new compositions. All eight engines receive the same baseline mark and ink budgets, and none is faded to make room for Growth. A recursive three-level φ partition provides eight contiguous golden-proportion territories; each engine's native ALGO/ART V8 strokes are composed into its region, without visible panels or clipping. Territories exchange owners at phrase-scale golden-angle intervals, while each voice's smoothed sound input changes how fully it fills its space. Previous layers fade naturally as fresh compositions occupy their next territory. A little reach across region boundaries keeps this a single drawing rather than eight separate posters. Uncheck **Eight golden territories** under **Audio & motion** to draw all eight engines over the whole sheet without regional guidance. Earlier scores preserve their recorded lead/support fades for exact playback.
 
-## Tissue & Graphite V6 (experimental preview)
+## Tissue & Graphite V6 and original Marker
 
-Live frames now use the actual ALGO/ART Tissue & Graphite V6 material renderer instead of showing marker strokes. ALGO/ART V8 vectors, eight equal voices, golden territories, sound-driven stroke windows and pen-pressure timings remain the structural input. Three unmodified upstream material files live in `materials/tissue-v6/`; a separate worker paints the visible geometry at a bounded preview resolution, keeping browser audio and the interface responsive. Rendering may update more slowly than the 30 FPS animation clock on low-powered devices; a fresh canvas initially remains blank while its first tissue buffer is computed.
+Tissue & Graphite V6 is the deployed default material (since v0.20). The **Drawing material** selector also restores the original Marker look for live compositions. ALGO/ART V8 vectors, eight equal voices, golden territories, sound-driven stroke windows and pen-pressure timings remain the structural input. Three unmodified upstream material files live in `materials/tissue-v6/`; a separate worker paints the visible geometry at a bounded preview resolution, keeping browser audio and the interface responsive. Rendering may update more slowly than the 30 FPS animation clock on low-powered devices; a fresh canvas initially remains blank while its first tissue buffer is computed.
 
-PNG and WebM record the tissue image. Print PNG re-renders the current sheet with a higher quality setting; SVG intentionally retains editable vector geometry, as in ALGO/ART. New scores record each frame's material seed and palette and replay as tissue. Older scores continue to replay in their original marker rendering mode. This is an experimental branch for visual and performance comparison; it does not change the deployed version until reviewed.
+PNG and WebM record the tissue image. Print PNG re-renders the current sheet with a higher quality setting; SVG intentionally retains editable vector geometry, as in ALGO/ART. New tissue scores record their material seed and palette and replay as tissue; Marker scores replay as markers. Older marker scores remain supported. The V6 integration is already deployed; new coherence safeguards are being validated separately.
 
 ## Getting started
 
@@ -34,7 +34,7 @@ Desktop Chrome is the initial target for browser-tab audio. Permissions, tab/sys
 
 Scores store a versioned file format and vector geometry, so playback does not need to regenerate scenes from the current ALGO/ART composition engine. Tissue scores also store the seed and source colours needed for their material treatment. Version-2 and version-3 scores save vector geometry once and use lossless compression for vectors and completed pressure records. Older hierarchy scores retain their recorded focal ellipse and reproduce moving fades exactly; new equal-voice scores use no focal fade. The score's renderer field is retained as provenance; support is governed by the score-format version. Version-3 scores also record the support fade strength. Earlier version-2 scores retain their original 55% fade; version-1 scores retain their baked-in ink. Imported scores are checked for valid geometry, references, sizes, bounded decompression and paint values.
 
-The underlying ALGO/ART source is pinned and kept unmodified under `vendor/algoart/`. CI verifies its SHA-256 equality against the [recorded upstream commit](vendor/algoart/PROVENANCE.md). Changes to rendering behaviour should preserve saved scores and historical ALGO/ART artworks.
+The underlying ALGO/ART V8 engine source is pinned and kept unmodified under `vendor/algoart/`. The V6 material files under `materials/tissue-v6/` are pinned separately. CI checks SHA-256 against both exact upstream commits: [V8 composition provenance](vendor/algoart/PROVENANCE.md) and [V6 material provenance](materials/tissue-v6/PROVENANCE.md). Changes to rendering behaviour should preserve saved scores and historical ALGO/ART artworks.
 
 ## Development
 
@@ -56,4 +56,4 @@ For detailed engine routing, capture, timing and visual mechanics, see [ARCHITEC
 
 ## Project status
 
-Experimental release v0.19. Visual composition, score compatibility and browser capture continue to evolve. The current artistic challenge is balancing eight independent golden-ratio systems into a coherent evolving ensemble, without losing individual musical responsiveness.
+Production release v0.20, with V6 tissue as the default material. Visual composition, score compatibility and browser capture continue to evolve. The current artistic challenge is balancing eight independent golden-ratio systems into a coherent evolving ensemble, without losing individual musical responsiveness.
