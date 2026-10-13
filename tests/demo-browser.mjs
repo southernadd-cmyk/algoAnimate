@@ -84,6 +84,19 @@ try {
   assert.equal(await page.locator('#playDemo').getAttribute('aria-busy'), 'true');
   releaseFirstTrack();
   await musicReady('Bubbles');
+  // Actual Chromium V6 worker integration: opt-in layered rendering creates a
+  // transferable cached composite and returns to authoritative V6 cleanly.
+  assert.equal(await page.locator('#layeredTissue').isChecked(), false);
+  await page.check('#layeredTissue');
+  await page.waitForFunction(() => {
+    const d = window.AlgoAnimate.diagnostics();
+    return d.material.layeredExperiment && d.material.frameReady;
+  }, null, { timeout: 30000 });
+  assert.equal(await page.locator('#message').textContent() === 'Tissue & Graphite rendering failed:', false);
+  await page.screenshot({ path: resolve(results, 'layered-tissue-experiment.png') });
+  await page.uncheck('#layeredTissue');
+  await page.waitForFunction(() => window.AlgoAnimate.diagnostics().material.frameReady, null, { timeout: 30000 });
+  assert.equal((await state()).material.layeredExperiment, false);
   assert.equal(await page.locator('#demoButtonLabel').textContent(), 'Demo playing');
   assert.equal(await page.locator('#playDemo').getAttribute('aria-busy'), 'false');
   assert.equal(await page.locator('#demoTrackNumber').textContent(),
