@@ -80,3 +80,7 @@ body.performance{overflow:hidden}body.performance .masthead,body.performance .de
 @media(max-width:580px){.frame-export{width:100%;justify-content:space-between}.frame-export select{flex:1}.score-actions{width:100%;display:grid;grid-template-columns:repeat(3,1fr)}.score-actions button{padding:8px 5px}.canvas-actions{justify-content:flex-start!important}.listening-overlay{right:8px;top:8px;padding:10px;max-height:calc(100% - 16px);width:calc(100% - 16px)}.listening-overlay h2{font-size:21px}.performance-controls{bottom:10px}.performance-controls span{width:100%;text-align:center}}
 
 body.replaying .engine-panel{display:none}
+
+/* The original per-voice marker samples return only when marker mode is selected. */
+body.marker-mode .engine-row .pen-sample{display:block}
+.material-choice{grid-template-columns:minmax(0,1fr);max-width:460px;margin:-8px 0 14px}
