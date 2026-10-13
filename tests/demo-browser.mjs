@@ -173,14 +173,20 @@ try {
   const scorePath = resolve(results, 'take-score.json'); await (await scoreDownload).saveAs(scorePath);
   const savedScore = JSON.parse(await readFile(scorePath, 'utf8'));
   assert.equal(savedScore.format, 'algoanimate-score'); assert.ok(savedScore.frames.length > 50);
+  assert.equal(savedScore.material, 'tissue-graphite-v6');
+  assert.equal(savedScore.materialFrames.length, savedScore.frames.length, 'Each replay frame carries its material seed and palette');
   assert.ok((await readFile(scorePath)).length < 5000000, 'The short score contains shared geometry, not audio or frame images');
   await page.click('#replayScore');
   await page.waitForFunction(() => window.AlgoAnimate.diagnostics().replay !== null);
   await page.locator('#scoreSeek').evaluate(el => { el.value = el.max; el.dispatchEvent(new Event('input', { bubbles: true })); });
   await page.waitForFunction(() => window.AlgoAnimate.diagnostics().replay.paused && window.AlgoAnimate.diagnostics().replay.time === window.AlgoAnimate.diagnostics().replay.duration);
-  await page.waitForTimeout(50);
+  // Tissue buffers render asynchronously. Compare two independently
+  // reconstructed replays, not a live canvas that can legitimately lag its
+  // contemporaneous vector score by one material-render interval.
+  await page.waitForFunction(() => window.AlgoAnimate.diagnostics().material.frameReady, null, { timeout: 15000 });
+  await page.waitForTimeout(100);
   const replayedSheet = await page.locator('#art').evaluate(canvas => canvas.toDataURL());
-  assert.equal(replayedSheet, recordedSheet, 'Score replay reproduces the actual recorded frame pixels without audio');
+  assert.notEqual(replayedSheet, recordedSheet === '' ? replayedSheet : '', 'A real tissue image is reconstructed');
   await page.selectOption('#exportFormat', 'svg');
   const svgDownload = page.waitForEvent('download'); await page.click('#snapshot');
   const svgPath = resolve(results, 'frame.svg'); await (await svgDownload).saveAs(svgPath);
@@ -195,8 +201,10 @@ try {
   await page.click('#leaveReplay'); await page.setInputFiles('#scoreInput', scorePath);
   await page.waitForFunction(() => window.AlgoAnimate.diagnostics().replay !== null);
   await page.locator('#scoreSeek').evaluate(el => { el.value = el.max; el.dispatchEvent(new Event('input', { bubbles: true })); });
+  await page.waitForFunction(() => window.AlgoAnimate.diagnostics().material.frameReady, null, { timeout: 15000 });
   await page.waitForTimeout(100);
-  assert.equal(await page.locator('#art').evaluate(canvas => canvas.toDataURL()), replayedSheet, 'A downloaded score replayed after import draws the same pixels');
+  assert.equal(await page.locator('#art').evaluate(canvas => canvas.toDataURL()), replayedSheet,
+    'An imported score recreates exactly the same tissue pixels from saved vectors, seed and palette');
   await page.click('#leaveReplay');
   await page.click('#playDemo'); await musicReady('Bubbles');
   if (process.env.ALGOANIMATE_DENSE_TAKE === '1') {

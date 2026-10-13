@@ -4,9 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#ece8df">
-  <meta name="description" content="One sound, eight layered AlgoArt engines and 24 marker pens. Listen, animate, record and export, entirely in your browser.">
+  <meta name="description" content="One sound, eight layered AlgoArt engines, torn translucent tissue and graphite. Listen, animate, record and export, entirely in your browser.">
   <meta property="og:title" content="ALGO / ANIMATE — Sound, in living ink.">
-  <meta property="og:description" content="A live drawing studio. Eight engines listen to your sound, each with its own changing ink and pen.">
+  <meta property="og:description" content="A live drawing studio. Eight engines listen to your sound, building translucent torn tissue and graphite from their changing colours.">
   <meta property="og:type" content="website">
   <title>ALGO / ANIMATE — Sound, in living ink.</title>
   <link rel="icon" href="./favicon.svg" type="image/svg+xml">
@@ -18,17 +18,17 @@
   <header class="masthead">
     <a class="brand" href="./" aria-label="AlgoAnimate home"><span class="phi">φ</span><span>ALGO<span class="slash">/</span>ANIMATE</span></a>
     <div class="masthead-intro">
-      <p class="eyebrow">AN EXPERIMENT IN SOUND &amp; INK</p>
+      <p class="eyebrow">AN EXPERIMENT IN SOUND &amp; MATERIAL</p>
       <h1>Sound, in living ink.</h1>
-      <p class="intro-note">One sound. Eight voices. 24 pens. <span>Sound shapes every mark.</span></p>
+      <p class="intro-note">One sound. Eight voices. Tissue &amp; graphite. <span>Sound shapes every layer.</span></p>
     </div>
-    <div class="masthead-note"><span class="edition">v0.19 · LIVE DRAWING STUDIO</span><a href="https://southernadd-cmyk.github.io/algoart/" target="_blank" rel="noopener">From ALGO / ART ↗</a></div>
+    <div class="masthead-note"><span class="edition">v0.20 · TISSUE &amp; GRAPHITE</span><a href="https://southernadd-cmyk.github.io/algoart/" target="_blank" rel="noopener">From ALGO / ART ↗</a></div>
   </header>
   <main>
     <div class="studio">
       <section class="workspace" aria-label="Live artwork and incoming sound">
         <div class="stage-heading"><span id="liveLabel" class="signal-state"><i aria-hidden="true"></i>WAITING FOR SOUND</span><span id="dimensions">1400 × 1000</span></div>
-        <div class="stage" id="stage"><div class="paper"><canvas id="art" width="1400" height="1000" aria-label="Eight equal AlgoArt voices drawing from one live sound source"></canvas></div><aside class="listening-overlay" id="listeningOverlay" aria-label="How sound drives the pens" hidden></aside><div class="performance-controls" id="performanceControls" hidden><button type="button" id="performancePause">Pause drawing</button><button type="button" id="performanceRecord">Record</button><button type="button" id="performanceClear">Clear</button><button type="button" id="performanceListen">How it listens</button><span id="performanceStatus" role="status"></span><button type="button" id="exitPerformance">Exit performance</button></div><span class="stage-corner" aria-hidden="true">φ / 24</span></div>
+        <div class="stage" id="stage"><div class="paper"><canvas id="art" width="1400" height="1000" aria-label="Eight equal AlgoArt voices drawing from one live sound source"></canvas></div><aside class="listening-overlay" id="listeningOverlay" aria-label="How sound drives the materials" hidden></aside><div class="performance-controls" id="performanceControls" hidden><button type="button" id="performancePause">Pause drawing</button><button type="button" id="performanceRecord">Record</button><button type="button" id="performanceClear">Clear</button><button type="button" id="performanceListen">How it listens</button><span id="performanceStatus" role="status"></span><button type="button" id="exitPerformance">Exit performance</button></div><span class="stage-corner" aria-hidden="true">φ / 8</span></div>
         <div class="art-caption"><span id="seed">SOUND-READY</span><span><span id="fps">—</span> FPS <span class="caption-divider">/</span> <span id="sceneCount">00</span> DRAWINGS</span><div class="canvas-actions"><button type="button" class="text-button" id="clearCanvas" aria-label="Clear the artwork while keeping audio connected">Clear canvas ↺</button><button type="button" class="text-button" id="pauseDrawing" aria-pressed="false">Pause drawing</button><button type="button" class="text-button" id="listen" aria-pressed="false">How it listens</button><button type="button" class="text-button" id="performance" aria-pressed="false">Performance ↗</button></div></div>
         <section class="recording-section" aria-label="Record and export artwork">
           <div class="record-bar"><div class="record-row"><button type="button" class="record-button" id="record" disabled><span aria-hidden="true">●</span> Record a take</button><button type="button" class="stop-record-button" id="stopRecording" hidden>■ Stop recording</button><span class="timecode" id="recordTime" aria-live="off">00:00</span></div><label class="check-label"><input type="checkbox" id="includeWaveform"> Include waveform</label><div class="frame-export"><label class="sr-only" for="exportFormat">Frame export format</label><select id="exportFormat"><option value="png">PNG · screen size</option><option value="print">PNG · 3× print</option><option value="svg">SVG · vector</option></select><button type="button" class="snapshot-button" id="snapshot">Save frame ↓</button></div></div>
@@ -46,7 +46,7 @@
         <section class="engine-panel" aria-label="Eight engine layers and their audio inputs">
           <div class="engine-heading"><div><p class="eyebrow">THE ENSEMBLE</p><h2>Eight voices. One sheet.</h2></div><span id="activeLayers">0 / 8 DRAWING</span></div>
           <div class="engine-layers" id="engineLayers"></div>
-          <p class="engine-note">A different pen and palette for every voice. Sound chooses both with its next drawing. Quiet voices hold their ink. Click a card to solo it; Solo and Mute mix the drawing voices while the sound continues.</p>
+          <p class="engine-note">A sound-selected palette guides the tissue and graphite of every voice. Quiet voices hold their layers. Click a card to solo it; Solo and Mute mix the drawing voices while the sound continues.</p>
         </section>
       </section>
       <aside class="desk" aria-label="Audio and artwork controls">
@@ -71,25 +71,25 @@
           <p id="message" class="message" role="status" aria-live="polite" hidden></p>
         </section>
         <section class="desk-section tuning-section">
-          <div class="section-label"><span>02 / YOUR TOUCH</span><h2>Shape the drawing.</h2></div>
+          <div class="section-label"><span>02 / YOUR TOUCH</span><h2>Shape the composition.</h2></div>
           <p class="section-note">Eight engines listen to different parts of the same sound. Tune the feel of their marks.</p>
           <div class="select-pair"><div><label class="select-label" for="orientation">Paper</label><select id="orientation"><option value="landscape">Landscape</option><option value="portrait">Portrait</option></select></div><div><label class="select-label" for="palette">Colour mood</label><select id="palette"><option value="mix">Original ink</option><option value="soft">Soft &amp; muted</option><option value="bold">Deep &amp; bold</option></select></div></div>
           <div class="range-control"><label for="density">Composition density</label><output for="density" id="densityValue">25%</output><input type="range" id="density" min="0" max="100" value="25"><div class="range-note"><span>More space</span><span>More marks</span></div></div>
-          <div class="range-control"><label for="evolution">Drawing cycle</label><output for="evolution" id="evolutionValue">~5.0s</output><input type="range" id="evolution" min="0" max="100" value="33"><div class="range-note"><span>Slow pen</span><span>Quick pen</span></div></div>
+          <div class="range-control"><label for="evolution">Drawing cycle</label><output for="evolution" id="evolutionValue">~5.0s</output><input type="range" id="evolution" min="0" max="100" value="33"><div class="range-note"><span>Slow layers</span><span>Quick layers</span></div></div>
           <details class="advanced-controls" id="tuningDetails"><summary>Audio &amp; motion</summary>
             <div class="range-control"><label for="sensitivity">Audio sensitivity</label><output for="sensitivity" id="sensitivityValue">100%</output><input type="range" id="sensitivity" min="25" max="300" value="100" step="5"><div class="range-note"><span>Quiet source</span><span>Stronger response</span></div></div>
-            <div class="range-control"><label for="motion">Pen response</label><output for="motion" id="motionValue">60%</output><input type="range" id="motion" min="0" max="100" value="60"><div class="range-note"><span>Even pressure</span><span>Sound-driven</span></div></div>
+            <div class="range-control"><label for="motion">Sound response</label><output for="motion" id="motionValue">60%</output><input type="range" id="motion" min="0" max="100" value="60"><div class="range-note"><span>Gentle marks</span><span>Sound-driven</span></div></div>
             <div class="range-control"><label for="smoothing">Smoothing</label><output for="smoothing" id="smoothingValue">55%</output><input type="range" id="smoothing" min="0" max="100" value="55"><div class="range-note"><span>Immediate</span><span>Fluid</span></div></div>
             <label class="check-label"><input type="checkbox" id="gentle"> Gentle motion</label>
             <label class="check-label"><input type="checkbox" id="sharedAnchor" checked> Eight golden territories</label>
           </details>
-          <p class="control-note">Pause the sound to hold the drawing. Play again and the pens pick up where they left off.</p>
+          <p class="control-note">Pause the sound to hold the drawing. Play again and the tissue and graphite continue building.</p>
         </section>
         <div class="studio-stamp" aria-hidden="true"><span>φ</span><p>Measured in sound.<br>Made with ink.</p></div>
       </aside>
     </div>
   </main>
-  <footer><span>ALGO / ANIMATE <span class="footer-dot">·</span> v0.19</span><span>Sound stays in your browser. No account. No uploads.</span><a href="https://github.com/southernadd-cmyk/algoAnimate" target="_blank" rel="noopener">Source on GitHub ↗</a></footer>
+  <footer><span>ALGO / ANIMATE <span class="footer-dot">·</span> v0.20</span><span>Sound stays in your browser. No account. No uploads.</span><a href="https://github.com/southernadd-cmyk/algoAnimate" target="_blank" rel="noopener">Source on GitHub ↗</a></footer>
   <dialog id="previewDialog"><div class="dialog-heading"><h2>Your recorded take</h2><button type="button" id="closePreview" aria-label="Close recording preview">✕</button></div><video id="recordingPreview" controls playsinline></video></dialog>
   <script src="./vendor/algoart/phi.js"></script>
   <script src="./vendor/algoart/random.js"></script>

@@ -34,6 +34,7 @@ export class ScoreCapture {
     this.openLayers = new Map();
     this.data = { format: SCORE_FORMAT, version: SCORE_FORMAT_VERSION, renderer: ALGOART_RENDERER_VERSION, source,
       featureKeys: keys, hierarchyLead: null, supportOpacityReduction: SUPPORT_OPACITY_REDUCTION,
+      material: 'tissue-graphite-v6', materialFrames: [],
       scenes: [], layers: [], papers: [], frames: [], duration: 0 };
   }
   sceneId(scene) {
@@ -107,6 +108,21 @@ export class ScoreCapture {
       focal ? [focal.x, focal.y, focal.rx, focal.ry] : null];
     this.bytes += JSON.stringify(frame).length;
     this.data.frames.push(frame); this.data.duration = time;
+    // Material must use the SAME source palette/seed on replay, even as
+    // styles change between sounds and generations of geometry.
+    const colours = [];
+    for (const voice of artwork.voices) {
+      if (!artwork.enabled(voice)) continue;
+      const scene = voice.art.activeLayer?.scene || voice.art.current;
+      for (const colour of scene?.style?.colors || []) {
+        if (!colours.includes(colour)) colours.push(colour);
+        if (colours.length >= 12) break;
+      }
+      if (colours.length >= 12) break;
+    }
+    const materialFrame = [artwork.drawnSeed || 'SOUND-READY', colours];
+    this.data.materialFrames.push(materialFrame);
+    this.bytes += JSON.stringify(materialFrame).length;
     return time < 180000 && this.data.frames.length < 5500 && this.bytes < MAX_SCORE_BYTES * 0.8;
   }
   finish() {
@@ -136,7 +152,16 @@ export function parseScore(text) {
   if (typeof text !== 'string' || text.length > MAX_SCORE_BYTES) fail();
   const score = JSON.parse(text);
   if (score?.format !== SCORE_FORMAT || ![1, 2, SCORE_FORMAT_VERSION].includes(score.version) || !Number.isInteger(score.renderer) || score.renderer < 1 || score.renderer > 1000) fail();
+  if (score.material !== undefined && !['marker', 'tissue-graphite-v6'].includes(score.material)) fail();
   if (score.version >= 2 && (!Number.isInteger(score.hierarchyLead) || score.hierarchyLead < 0 || score.hierarchyLead >= 8)) fail();
+  if (score.material === 'tissue-graphite-v6') {
+    array(score.materialFrames, 5500);
+    if (score.materialFrames.length !== score.frames.length) fail();
+    for (const [seed, inks] of score.materialFrames) {
+      if (typeof seed !== 'string' || seed.length > 200) fail();
+      array(inks, 12); inks.forEach(colour);
+    }
+  }
   array(score.frames, 5500); array(score.scenes, 5000); array(score.layers, 10000); array(score.papers, 200);
   if (!score.frames.length || !score.papers.length) fail();
   number(score.duration, 0, 180000);
@@ -228,6 +253,7 @@ export class ScoreReplay {
   }
   get frame() { return this.score.frames[this.index]; }
   get features() { return unpackFeatures(this.frame[1]); }
+  get materialFrame() { return this.score.materialFrames?.[this.index] || ['SOUND-READY', []]; }
   get engines() { return this.frame[4].map(voice => ({ enabled: Boolean(voice[0]), flowing: Boolean(voice[1]) })); }
   sheet() {
     const frame = this.frame, paper = this.score.papers[frame[2]];
