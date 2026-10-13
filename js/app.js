@@ -7,7 +7,7 @@ import { VideoRecorder, MAX_TAKE_SECONDS } from './recording.js';
 import { StyleDeck, styleSettings } from './styles.js';
 import { BandMeters, SpectralChangeMeter, BAND_KEYS, meterLevel } from './meters.js';
 import { FrameClock } from './frame-clock.js';
-import { DemoPlaylist, DEMO_TRACKS } from './demo.js';
+import { DemoPlaylist, DEMO_GENRES } from './demo.js';
 import { captureSheet, paintSheet, sheetSVG } from './export.js';
 import { ScoreCapture, ScoreReplay, parseScore, MAX_SCORE_BYTES } from './scores.js';
 import { ScreenAwake, shortcut } from './performance.js';
@@ -52,7 +52,7 @@ const awake = new ScreenAwake(status => {
   $('wakeStatus').textContent = text;
   $('performanceStatus').textContent = (recorder.active ? '● Recording · ' : '') + text;
 });
-const names = { tab: 'Browser tab audio', microphone: 'Microphone', demo: 'Lo-fi demo' };
+const names = { tab: 'Browser tab audio', microphone: 'Microphone', demo: 'Demo music' };
 const layerControls = artwork.voices.map(voice => {
   const { route } = voice;
   const row = document.createElement('div'); row.className = 'engine-row'; row.dataset.engine = route.id;
@@ -106,9 +106,10 @@ const recorder = new VideoRecorder({
 const audio = new AudioInput({ onEnded: () => disconnect(true) });
 const demoPlaylist = new DemoPlaylist(demoPlayer, {
   onTrack: track => {
-    sourceLabel = names.demo + ' · ' + track.title;
+    sourceLabel = names.demo + ' · ' + demoPlaylist.genre.label + ' · ' + track.title;
     $('demoTrackLink').textContent = track.title;
     $('demoTrackLink').href = track.source;
+    $('demoArtist').textContent = track.artist;
     syncControls();
   },
   onLoading: () => syncControls(),
@@ -282,10 +283,14 @@ function syncControls() {
   $('demoButtonLabel').textContent = demoLoading ? 'Loading track…' : audio.kind === 'demo'
     ? demoPlayer.paused ? 'Resume demo sound' : 'Demo playing' : 'Try demo sound';
   $('demoTrackNumber').textContent = String(demoPlaylist.index + 1).padStart(2, '0')
-    + ' / ' + String(DEMO_TRACKS.length).padStart(2, '0');
+    + ' / ' + String(demoPlaylist.genre.tracks.length).padStart(2, '0');
+  $('demoGenreNumber').textContent = String(demoPlaylist.genreIndex + 1).padStart(2, '0')
+    + ' / ' + String(DEMO_GENRES.length).padStart(2, '0');
+  $('demoGenreName').textContent = demoPlaylist.genre.label;
   $('demoDeck').hidden = audio.kind !== 'demo';
   $('demoDeck').setAttribute('aria-busy', String(demoLoading));
   $('nextDemo').disabled = pending || demoLoading || demoSwitching || audio.kind !== 'demo';
+  $('nextGenre').disabled = pending || demoLoading || demoSwitching || audio.kind !== 'demo';
   player.hidden = !fileURL || (audio.kind !== 'file' && audio.kind !== null);
   player.inert = pending || recorder.busy;
 }
@@ -302,7 +307,7 @@ async function connect(action, label) {
   try {
     // action() is invoked synchronously so tab capture retains user activation.
     await action();
-    sourceLabel = audio.kind === 'demo' ? names.demo + ' · ' + demoPlaylist.track.title : label;
+    sourceLabel = audio.kind === 'demo' ? names.demo + ' · ' + demoPlaylist.genre.label + ' · ' + demoPlaylist.track.title : label;
     resetSound();
     message(audio.kind === 'tab' ? 'Connected. Return to your sound tab to control playback.' : 'Connected. Play some sound and watch the marks respond.');
   } catch (error) { message(describeCaptureError(error), true); }
@@ -331,13 +336,15 @@ $('playDemo').addEventListener('click', () => {
     catch (error) { audio.stop(); throw error; }
   }, names.demo);
 });
-$('nextDemo').addEventListener('click', async () => {
+async function switchDemo(action) {
   if (pending || demoSwitching || audio.kind !== 'demo') return;
   demoSwitching = true; syncControls();
-  try { await demoPlaylist.next(); }
-  catch (error) { await disconnect(); message('The next demo track could not load. Try the demo again. ' + error.message, true); }
+  try { await action(); }
+  catch (error) { await disconnect(); message('Demo music could not load. Try again or use an audio file. ' + error.message, true); }
   finally { demoSwitching = false; syncControls(); }
-});
+}
+$('nextDemo').addEventListener('click', () => switchDemo(() => demoPlaylist.next()));
+$('nextGenre').addEventListener('click', () => switchDemo(() => demoPlaylist.nextGenre()));
 demoPlayer.addEventListener('play', () => syncControls());
 demoPlayer.addEventListener('pause', () => { soundGate.reset(); syncControls(); });
 $('stopAudio').addEventListener('click', () => disconnect());
@@ -432,7 +439,7 @@ for (const id of ['sensitivity', 'motion', 'evolution', 'smoothing', 'density'])
     ? '~' + evolutionInterval(+$(id).value).toFixed(1) + 's' : $(id).value + '%';
   $(id).addEventListener('input', update); update();
 }
-$('gentle').checked = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+$('gentle').checked = true;
 
 function drawWaveform(data) {
   const width = waveform.width, height = waveform.height;
@@ -690,7 +697,8 @@ window.AlgoAnimate = Object.freeze({
     audio: audio.diagnostics(), seed: artwork.drawnSeed, engine: 'ensemble',
     material: { name: 'Tissue & Graphite', revision: 6, worker: Boolean(tissue.worker), frameReady: Boolean(tissue.frame) },
     demo: audio.kind === 'demo' ? { title: demoPlaylist.track.title, index: demoPlaylist.index,
-      tracks: DEMO_TRACKS.length, paused: demoPlayer.paused, time: demoPlayer.currentTime } : null,
+      genre: demoPlaylist.genre.label, genreIndex: demoPlaylist.genreIndex, genres: DEMO_GENRES.length,
+      tracks: demoPlaylist.genre.tracks.length, paused: demoPlayer.paused, time: demoPlayer.currentTime } : null,
     engines: artwork.diagnostics(), compositions: artwork.sceneCount,
     paths: artwork.pathCount, worker: Boolean(builder.worker), building: isBuilding(),
     dimensions: [art.width, art.height], features: { level: features.level, bass: features.bass,
