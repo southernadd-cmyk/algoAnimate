@@ -131,7 +131,7 @@ function syncMix() {
 function syncScoreCapture() {
   if (recorder.active && scoreTakeStarted !== recorder.started) {
     scoreTakeStarted = recorder.started;
-    scoreData = null; scoreCapture = new ScoreCapture(recorder.started, sourceLabel);
+    scoreData = null; scoreCapture = new ScoreCapture(recorder.started, sourceLabel, { seed: tissue.seed(artwork), palette: tissue.palette(artwork) });
     scoreCapture.capture(recorder.started, artwork, features, $('gentle').checked);
   } else if (!recorder.active && scoreCapture) finishScore();
 }
@@ -527,7 +527,7 @@ $('snapshot').addEventListener('click', async () => {
       if (!replay || tissueReplay()) {
         // Full V6 pigment/height/graphite re-render, not a 3x upscaled marker.
         const bitmap = await tissue.renderOnce(sheet,
-          replay ? replaySeed() : artwork.drawnSeed, replay ? replayPalette() : tissue.palette(artwork));
+          replay ? replaySeed() : tissue.seed(artwork), replay ? replayPalette() : tissue.palette(artwork));
         try { printCtx.drawImage(bitmap, 0, 0, canvas.width, canvas.height); }
         finally { bitmap.close(); }
       } else paintSheet(printCtx, sheet, 3);
