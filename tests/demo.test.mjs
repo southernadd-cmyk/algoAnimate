@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DemoPlaylist, DEMO_TRACKS } from '../js/demo.js';
+import { DemoPlaylist, DEMO_TRACKS, DEMO_GENRES } from '../js/demo.js';
 import { AudioInput } from '../js/audio.js';
 
 class Player extends EventTarget {
@@ -26,6 +26,26 @@ test('demo advances on real ended events, wraps the playlist, and disconnect rel
   element.dispatchEvent(new Event('ended'));
   await Promise.resolve();
   assert.equal(titles.length, DEMO_TRACKS.length + 1, 'A disconnected demo cannot restart itself');
+});
+
+test('Next genre switches genre, starts its first track, wraps and retains one audio element', async () => {
+  const element = new Player();
+  const playlist = new DemoPlaylist(element);
+  await playlist.start();
+  assert.equal(playlist.genre.label, 'Lo-fi');
+  for (let i = 1; i < DEMO_GENRES.length; i++) {
+    await playlist.nextGenre();
+    assert.equal(playlist.genre.label, DEMO_GENRES[i].label);
+    assert.equal(playlist.index, 0);
+    assert.equal(playlist.track.title, DEMO_GENRES[i].tracks[0].title);
+  }
+  await playlist.nextGenre();
+  assert.equal(playlist.genre.label, 'Lo-fi');
+  assert.equal(playlist.track.title, DEMO_TRACKS[0].title);
+  await playlist.start(DEMO_GENRES[0].tracks.length - 1, 0);
+  await playlist.next();
+  assert.equal(playlist.genre.label, 'Drum & bass', 'Next track crosses into next genre at the end');
+  playlist.stop();
 });
 
 test('disconnect while playback is loading ignores the obsolete play rejection', async () => {
