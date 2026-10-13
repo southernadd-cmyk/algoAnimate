@@ -58,8 +58,7 @@ export class TissueMaterial {
     }
     return colours.length ? colours : ['#748e83', '#bc803f', '#626f61'];
   }
-  paint(sheet, seed, palette, now = performance.now()) {
-    // Present the last completed tissue frame while rendering the next one.
+  present(sheet) {
     this.context.save();
     this.context.globalCompositeOperation = 'source-over';
     this.context.globalAlpha = 1;
@@ -67,6 +66,10 @@ export class TissueMaterial {
     this.context.fillRect(0, 0, sheet.width, sheet.height);
     if (this.frame) this.context.drawImage(this.frame, 0, 0, sheet.width, sheet.height);
     this.context.restore();
+  }
+  paint(sheet, seed, palette, now = performance.now()) {
+    // Present the last completed tissue frame while rendering the next one.
+    this.present(sheet);
     if (!this.worker || this.pending || now - this.lastRequest < 110) return;
     // No visible source geometry means real blank paper, not a fully painted
     // composition shown ahead of its audio-controlled drawing schedule.
@@ -77,6 +80,15 @@ export class TissueMaterial {
     });
   }
   live(artwork, gentle, now = performance.now()) {
+    const paper = artwork.paperScene;
+    if (!paper) return;
+    // Path-window extraction can be expensive for eight simultaneous voices.
+    // Do it only when the material worker can accept the next frame, rather
+    // than needlessly reconstructing every vector at the 30 FPS UI cadence.
+    if (!this.worker || this.pending || now - this.lastRequest < 110) {
+      this.present(paper);
+      return;
+    }
     const sheet = captureSheet(artwork, gentle);
     this.paint(sheet, artwork.drawnSeed || 'SOUND-READY', this.palette(artwork), now);
   }
